@@ -5,7 +5,7 @@
   "description": "Mobile-friendly AI food calorie analysis and weight tracking app with Gemini vision",
   "main": "server/index.js",
   "scripts": {
-    "build": "npm --prefix client install && npm --prefix client run build",
+    "build": "node -e \"import('fs').then(fs => { if (fs.existsSync('./client/package.json')) { import('child_process').then(cp => cp.execSync('npm --prefix client install && npm --prefix client run build', {stdio: 'inherit'})); } else { console.log('Client package.json not found, using prebuilt server/public assets.'); } });\"",
     "start": "node server/index.js",
     "dev:server": "node --watch server/index.js",
     "dev:client": "npm --prefix client run dev",

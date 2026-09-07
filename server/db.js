@@ -119,7 +119,28 @@ export const db = {
     const data = readDb();
     const index = data.meals.findIndex(m => m.id === id);
     if (index === -1) return null;
-    data.meals[index] = { ...data.meals[index], ...updates, updatedAt: new Date().toISOString() };
+
+    const existing = data.meals[index];
+    const newMacros = updates.macros || (updates.proteinG !== undefined ? {
+      proteinG: Number(updates.proteinG) || 0,
+      carbsG: Number(updates.carbsG) || 0,
+      fatG: Number(updates.fatG) || 0,
+      fiberG: Number(updates.fiberG) || 0
+    } : existing.macros);
+
+    data.meals[index] = {
+      ...existing,
+      ...updates,
+      estimatedWeightG: updates.estimatedWeightG !== undefined ? Number(updates.estimatedWeightG) : existing.estimatedWeightG,
+      calories: updates.calories !== undefined ? Number(updates.calories) : existing.calories,
+      macros: {
+        proteinG: Number(newMacros.proteinG) || 0,
+        carbsG: Number(newMacros.carbsG) || 0,
+        fatG: Number(newMacros.fatG) || 0,
+        fiberG: Number(newMacros.fiberG) || 0
+      },
+      updatedAt: new Date().toISOString()
+    };
     writeDb(data);
     return data.meals[index];
   },
