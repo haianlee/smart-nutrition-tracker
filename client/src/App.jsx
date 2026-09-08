@@ -172,7 +172,7 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-2xl w-full mx-auto p-4 sm:p-5">
-        <ErrorBoundary>
+        <ErrorBoundary key={activeTab}>
           {activeTab === 'food' && (
             <FoodCapture
               selectedDate={selectedDate}

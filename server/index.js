@@ -373,14 +373,37 @@ app.post('/api/restore-json', (req, res) => {
   }
 });
 
-// Serve frontend in production
-const PUBLIC_DIR = fs.existsSync(path.join(__dirname, 'public'))
-  ? path.join(__dirname, 'public')
-  : path.join(__dirname, '..', 'client', 'dist');
+// Serve frontend in production (Priority: client/dist freshly built, then server/public)
+const clientDist = path.join(__dirname, '..', 'client', 'dist');
+const serverPublic = path.join(__dirname, 'public');
 
-if (fs.existsSync(PUBLIC_DIR)) {
-  app.use(express.static(PUBLIC_DIR));
+const PUBLIC_DIR = (fs.existsSync(clientDist) && fs.existsSync(path.join(clientDist, 'index.html')))
+  ? clientDist
+  : (fs.existsSync(serverPublic) && fs.existsSync(path.join(serverPublic, 'index.html')) ? serverPublic : null);
+
+if (PUBLIC_DIR) {
+  // Prevent mobile browsers from caching index.html to ensure users always receive latest bundle
+  app.use((req, res, next) => {
+    if (req.path === '/' || req.path.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+    next();
+  });
+
+  app.use(express.static(PUBLIC_DIR, {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      }
+    }
+  }));
+
   app.get('*', (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
   });
 }

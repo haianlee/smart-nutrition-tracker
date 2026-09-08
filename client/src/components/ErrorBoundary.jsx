@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, RefreshCw, RotateCcw } from 'lucide-react';
 
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -15,6 +15,10 @@ export default class ErrorBoundary extends React.Component {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
   }
 
+  handleRetry = () => {
+    this.setState({ hasError: false, error: null });
+  };
+
   handleReload = () => {
     window.location.reload();
   };
@@ -28,20 +32,29 @@ export default class ErrorBoundary extends React.Component {
             <h3 className="font-bold text-base">此區塊載入時發生小錯誤</h3>
           </div>
           <p className="text-xs text-slate-600 mb-4 leading-relaxed">
-            系統已攔截此問題避免白屏。您可以嘗試點擊下方按鈕重新載入畫面。
+            系統已攔截此問題避免白屏。您可以嘗試點擊「重試此區塊」或重新載入頁面。
           </p>
           {this.state.error?.message && (
             <div className="p-3 mb-4 rounded-xl bg-rose-100/60 text-rose-800 font-mono text-[11px] break-all">
               {this.state.error.message}
             </div>
           )}
-          <button
-            onClick={this.handleReload}
-            className="py-2.5 px-4 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-medium text-xs flex items-center gap-2 transition active:scale-95 shadow-sm"
-          >
-            <RefreshCw size={15} />
-            <span>重新載入頁面</span>
-          </button>
+          <div className="flex gap-2.5">
+            <button
+              onClick={this.handleRetry}
+              className="py-2.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs flex items-center gap-2 transition active:scale-95 shadow-sm"
+            >
+              <RotateCcw size={15} />
+              <span>重試此區塊</span>
+            </button>
+            <button
+              onClick={this.handleReload}
+              className="py-2.5 px-4 rounded-2xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium text-xs flex items-center gap-2 transition active:scale-95"
+            >
+              <RefreshCw size={15} />
+              <span>重新載入頁面</span>
+            </button>
+          </div>
         </div>
       );
     }
