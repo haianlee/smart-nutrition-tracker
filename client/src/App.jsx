@@ -29,18 +29,50 @@ export default function App() {
       }
     } catch (err) {
       console.error('Error fetching meals for date:', err);
+      const cachedMeals = JSON.parse(localStorage.getItem('nt_all_meals') || '[]');
+      setMealsForDate(cachedMeals.filter(m => m.date === date));
     }
   };
 
   const fetchAllData = async () => {
     try {
-      await fetchMealsForDate(selectedDate);
+      // 1. Immediately show cached data from phone storage
+      const cachedMeals = JSON.parse(localStorage.getItem('nt_all_meals') || '[]');
+      const cachedWeights = JSON.parse(localStorage.getItem('nt_all_weights') || '[]');
+      if (cachedWeights.length > 0 && weights.length === 0) {
+        setWeights(cachedWeights);
+      }
+      if (cachedMeals.length > 0 && mealsForDate.length === 0) {
+        setMealsForDate(cachedMeals.filter(m => m.date === selectedDate));
+      }
 
-      // Fetch weights
+      // 2. Fetch server all meals & weights to compare
+      const allMealsRes = await fetch('/api/meals');
+      const allServerMeals = allMealsRes.ok ? await allMealsRes.json() : [];
+
       const weightRes = await fetch('/api/weights');
-      if (weightRes.ok) {
-        const data = await weightRes.json();
-        setWeights(data);
+      const allServerWeights = weightRes.ok ? await weightRes.json() : [];
+
+      // If server has fewer items than local phone cache (e.g. Render redeploy wiped server disk), auto-restore!
+      if (cachedMeals.length > allServerMeals.length || cachedWeights.length > allServerWeights.length) {
+        console.log('🔄 偵測到雲端新部署重置，手機端自動向伺服器同步還原舊紀錄...');
+        await fetch('/api/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ meals: cachedMeals, weights: cachedWeights })
+        });
+        await fetchMealsForDate(selectedDate);
+        setWeights(cachedWeights);
+      } else {
+        // Server has equal or more data, update phone cache
+        if (allServerMeals.length > 0) {
+          localStorage.setItem('nt_all_meals', JSON.stringify(allServerMeals));
+        }
+        if (allServerWeights.length > 0) {
+          localStorage.setItem('nt_all_weights', JSON.stringify(allServerWeights));
+          setWeights(allServerWeights);
+        }
+        await fetchMealsForDate(selectedDate);
       }
 
       // Fetch settings
@@ -50,7 +82,9 @@ export default function App() {
         setSettings(data);
       }
     } catch (err) {
-      console.error('Error fetching initial data:', err);
+      console.error('Sync error (using phone offline cache):', err);
+      const cachedMeals = JSON.parse(localStorage.getItem('nt_all_meals') || '[]');
+      setMealsForDate(cachedMeals.filter(m => m.date === selectedDate));
     }
   };
 
@@ -62,20 +96,28 @@ export default function App() {
   const latestWeight = weights.length > 0 ? weights[weights.length - 1].weightKg : null;
 
   const handleMealAdded = (newMeal) => {
+    // Update state
     if (newMeal.date === selectedDate) {
       setMealsForDate(prev => [newMeal, ...prev]);
     } else {
       setSelectedDate(newMeal.date);
     }
+    // Update local cache
+    const cachedMeals = JSON.parse(localStorage.getItem('nt_all_meals') || '[]');
+    const updatedAll = [newMeal, ...cachedMeals.filter(m => m.id !== newMeal.id)];
+    localStorage.setItem('nt_all_meals', JSON.stringify(updatedAll));
   };
 
   const handleMealUpdated = (updatedMeal) => {
     if (updatedMeal.date === selectedDate) {
       setMealsForDate(prev => prev.map(m => m.id === updatedMeal.id ? updatedMeal : m));
     } else {
-      // If the user changed the meal's date to another day, remove from current view
       setMealsForDate(prev => prev.filter(m => m.id !== updatedMeal.id));
     }
+    // Update local cache
+    const cachedMeals = JSON.parse(localStorage.getItem('nt_all_meals') || '[]');
+    const updatedAll = cachedMeals.map(m => m.id === updatedMeal.id ? updatedMeal : m);
+    localStorage.setItem('nt_all_meals', JSON.stringify(updatedAll));
   };
 
   const handleMealDeleted = async (id) => {
@@ -83,6 +125,9 @@ export default function App() {
       const res = await fetch(`/api/meals/${id}`, { method: 'DELETE' });
       if (res.ok) {
         setMealsForDate(prev => prev.filter(m => m.id !== id));
+        const cachedMeals = JSON.parse(localStorage.getItem('nt_all_meals') || '[]');
+        const updatedAll = cachedMeals.filter(m => m.id !== id);
+        localStorage.setItem('nt_all_meals', JSON.stringify(updatedAll));
       }
     } catch (err) {
       console.error(err);
@@ -92,7 +137,9 @@ export default function App() {
   const handleWeightSaved = (newRecord) => {
     setWeights(prev => {
       const filtered = prev.filter(w => w.date !== newRecord.date);
-      return [...filtered, newRecord].sort((a, b) => a.date.localeCompare(b.date));
+      const updated = [...filtered, newRecord].sort((a, b) => a.date.localeCompare(b.date));
+      localStorage.setItem('nt_all_weights', JSON.stringify(updated));
+      return updated;
     });
   };
 
@@ -100,7 +147,11 @@ export default function App() {
     try {
       const res = await fetch(`/api/weights/${id}`, { method: 'DELETE' });
       if (res.ok) {
-        setWeights(prev => prev.filter(w => w.id !== id));
+        setWeights(prev => {
+          const updated = prev.filter(w => w.id !== id);
+          localStorage.setItem('nt_all_weights', JSON.stringify(updated));
+          return updated;
+        });
       }
     } catch (err) {
       console.error(err);
@@ -148,7 +199,7 @@ export default function App() {
         )}
 
         {activeTab === 'reports' && (
-          <ReportsView onDataChanged={fetchTodayData} />
+          <ReportsView onDataChanged={fetchAllData} />
         )}
       </main>
 

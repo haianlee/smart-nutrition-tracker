@@ -350,5 +350,77 @@ export const db = {
       deficit,
       targetMacros: data.settings.targetMacros
     };
+  },
+
+  // --- AUTO SYNC & PERSISTENCE ---
+  syncData({ meals = [], weights = [], settings = null }) {
+    const data = readDb();
+
+    // Merge meals by ID
+    const mealMap = new Map();
+    data.meals.forEach(m => mealMap.set(m.id, m));
+    meals.forEach(m => {
+      if (!mealMap.has(m.id)) {
+        mealMap.set(m.id, m);
+      } else {
+        const existing = mealMap.get(m.id);
+        const existingTime = existing.updatedAt || existing.createdAt || '';
+        const clientTime = m.updatedAt || m.createdAt || '';
+        if (clientTime >= existingTime) {
+          mealMap.set(m.id, m);
+        }
+      }
+    });
+    data.meals = Array.from(mealMap.values());
+
+    // Merge weights by date
+    const weightMap = new Map();
+    data.weights.forEach(w => weightMap.set(w.date, w));
+    weights.forEach(w => {
+      if (!weightMap.has(w.date)) {
+        weightMap.set(w.date, w);
+      } else {
+        const existing = weightMap.get(w.date);
+        const existingTime = existing.updatedAt || '';
+        const clientTime = w.updatedAt || '';
+        if (clientTime >= existingTime) {
+          weightMap.set(w.date, w);
+        }
+      }
+    });
+    data.weights = Array.from(weightMap.values());
+
+    if (settings) {
+      data.settings = {
+        ...data.settings,
+        ...settings,
+        userProfile: { ...data.settings.userProfile, ...(settings.userProfile || {}) },
+        targetMacros: { ...data.settings.targetMacros, ...(settings.targetMacros || {}) },
+        notifications: { ...data.settings.notifications, ...(settings.notifications || {}) }
+      };
+    }
+
+    writeDb(data);
+    return {
+      meals: data.meals,
+      weights: data.weights,
+      settings: data.settings
+    };
+  },
+
+  getAllData() {
+    return readDb();
+  },
+
+  replaceAllData(imported) {
+    if (imported && (Array.isArray(imported.meals) || Array.isArray(imported.weights))) {
+      writeDb({
+        meals: imported.meals || [],
+        weights: imported.weights || [],
+        settings: imported.settings || defaultData.settings
+      });
+      return true;
+    }
+    return false;
   }
 };

@@ -330,6 +330,46 @@ app.get('/api/export-csv', (req, res) => {
   }
 });
 
+// 10. Bidirectional Sync API (Protects against Render ephemeral disk wipes)
+app.post('/api/sync', (req, res) => {
+  try {
+    const { meals = [], weights = [], settings = null } = req.body;
+    const synced = db.syncData({ meals, weights, settings });
+    res.json({
+      success: true,
+      message: '資料同步成功！',
+      mealsCount: synced.meals.length,
+      weightsCount: synced.weights.length
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 11. Full JSON Backup download
+app.get('/api/backup-json', (req, res) => {
+  try {
+    const allData = db.getAllData();
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename=nutrition_tracker_backup_${new Date().toISOString().split('T')[0]}.json`);
+    res.send(JSON.stringify(allData, null, 2));
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
+// 12. Full JSON Restore upload
+app.post('/api/restore-json', (req, res) => {
+  try {
+    const imported = req.body;
+    const ok = db.replaceAllData(imported);
+    if (!ok) return res.status(400).json({ error: '無效的備份檔案格式' });
+    res.json({ success: true, message: '資料庫已成功完整還原！' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Serve frontend in production
 const PUBLIC_DIR = fs.existsSync(path.join(__dirname, 'public'))
   ? path.join(__dirname, 'public')

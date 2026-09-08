@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { Mail, Download, Database, Check, AlertCircle, Eye, Calendar, Sparkles, Send } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Mail, Download, Database, Check, AlertCircle, Eye, Calendar, Sparkles, Send, Upload, ShieldCheck } from 'lucide-react';
 
 export default function ReportsView({ onDataChanged }) {
   const [dailySummary, setDailySummary] = useState(null);
   const [isSending, setIsSending] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
+  const fileInputRef = useRef(null);
 
   const fetchDaily = async () => {
     try {
@@ -68,6 +70,52 @@ export default function ReportsView({ onDataChanged }) {
 
   const handleExportCsv = () => {
     window.open('/api/export-csv', '_blank');
+  };
+
+  const handleDownloadBackup = () => {
+    window.open('/api/backup-json', '_blank');
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!window.confirm(`確定要以備份檔「${file.name}」還原健康資料庫嗎？這將覆蓋現有紀錄。`)) {
+      e.target.value = '';
+      return;
+    }
+
+    setIsRestoring(true);
+    setStatusMsg('');
+    try {
+      const text = await file.text();
+      const jsonContent = JSON.parse(text);
+      const res = await fetch('/api/restore-json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(jsonContent)
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || '還原失敗');
+
+      // Update phone localStorage
+      if (jsonContent.meals) {
+        localStorage.setItem('nt_all_meals', JSON.stringify(jsonContent.meals));
+      }
+      if (jsonContent.weights) {
+        localStorage.setItem('nt_all_weights', JSON.stringify(jsonContent.weights));
+      }
+
+      setStatusMsg(`✅ 備份還原成功！(飲食 ${result.mealsCount} 筆，體重 ${result.weightsCount} 筆)`);
+      fetchDaily();
+      if (onDataChanged) onDataChanged();
+      setTimeout(() => setStatusMsg(''), 5000);
+    } catch (err) {
+      setStatusMsg(`❌ 還原失敗: ${err.message}`);
+    } finally {
+      setIsRestoring(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   return (
@@ -169,12 +217,57 @@ export default function ReportsView({ onDataChanged }) {
 
       {/* Backup & Export Utility Card */}
       <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-3">
-        <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-          <Database size={18} className="text-slate-500" />
-          資料管理與備份
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+            <Database size={18} className="text-slate-500" />
+            資料管理與備份
+          </h3>
+          <span className="text-[11px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-medium flex items-center gap-1 border border-emerald-200">
+            <ShieldCheck size={13} />
+            手機自動備份已啟用
+          </span>
+        </div>
+
+        <p className="text-xs text-slate-500 leading-relaxed">
+          手機端會自動快取所有紀錄。當 Render 雲端改版重開時，手機端會自動回補資料庫。您亦可隨時手動下載或還原完整 JSON 備份檔。
+        </p>
+
+        {/* Hidden File Input for Restore */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileUpload}
+          accept=".json,application/json"
+          className="hidden"
+        />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <button
+            onClick={handleDownloadBackup}
+            className="py-3 px-4 rounded-2xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-xs font-semibold flex items-center justify-center gap-2 transition active:scale-98"
+          >
+            <Download size={16} className="text-indigo-600" />
+            <span>下載完整備份 (JSON)</span>
+          </button>
+
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isRestoring}
+            className="py-3 px-4 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center gap-2 transition active:scale-98 disabled:opacity-50"
+          >
+            {isRestoring ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-slate-400 border-t-slate-700 rounded-full animate-spin" />
+                <span>還原中...</span>
+              </>
+            ) : (
+              <>
+                <Upload size={16} className="text-slate-600" />
+                <span>上傳備份檔還原 (JSON)</span>
+              </>
+            )}
+          </button>
+
           <button
             onClick={handleExportCsv}
             className="py-3 px-4 rounded-2xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center justify-center gap-2 transition active:scale-98"
