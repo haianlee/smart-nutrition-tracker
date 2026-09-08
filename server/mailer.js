@@ -7,6 +7,20 @@ export function createTransporter(settings) {
     return null;
   }
 
+  const isGmail = notif.smtpHost?.toLowerCase().includes('gmail');
+  if (isGmail) {
+    return nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: notif.smtpUser,
+        pass: notif.smtpPass
+      },
+      connectionTimeout: 8000,
+      greetingTimeout: 8000,
+      socketTimeout: 10000
+    });
+  }
+
   return nodemailer.createTransport({
     host: notif.smtpHost,
     port: Number(notif.smtpPort) || 587,
@@ -14,7 +28,10 @@ export function createTransporter(settings) {
     auth: {
       user: notif.smtpUser,
       pass: notif.smtpPass
-    }
+    },
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 10000
   });
 }
 
@@ -138,15 +155,44 @@ export async function sendDailyDigest(dateStr = null) {
   const recipient = notif.emailRecipient;
 
   if (!recipient) {
-    throw new Error('未設定接收通知的電子信箱 (Email Recipient)');
+    throw new Error('未設定接收通知的電子信箱 (請至設定中填寫 Email Recipient)');
   }
 
   const summary = db.getDailySummary(dateStr);
   const html = buildDailyReportHtml(summary, settings);
 
+  // 1. If user provided a Resend API Key, use Resend HTTP API (Port 443, 100% immune to Render SMTP block)
+  if (notif.resendApiKey && notif.resendApiKey.trim()) {
+    try {
+      const resendRes = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${notif.resendApiKey.trim()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: notif.smtpFrom || 'Smart Nutrition <onboarding@resend.dev>',
+          to: recipient,
+          subject: `【每日健康結報】${summary.date} 攝取 ${summary.totalCalories} kcal (${summary.deficit >= 0 ? '赤字 ' + summary.deficit : '盈餘 +' + Math.abs(summary.deficit)} kcal)`,
+          html
+        })
+      });
+
+      const resendData = await resendRes.json();
+      if (!resendRes.ok) {
+        throw new Error(resendData.message || 'Resend API 發送失敗');
+      }
+      return { success: true, messageId: resendData.id, recipient, provider: 'resend' };
+    } catch (err) {
+      console.error('Resend send error:', err);
+      throw new Error(`Resend 郵件發送失敗: ${err.message}`);
+    }
+  }
+
+  // 2. Otherwise use SMTP with strict timeout
   const transporter = createTransporter(settings);
   if (!transporter) {
-    throw new Error('SMTP 郵件伺服器尚未完成設定（請填寫 Host, User, Pass）');
+    throw new Error('尚未設定 SMTP 伺服器密碼或 Resend Key（請點擊右上角⚙️設定，或改用下方的「手機郵件 App 寄出」功能）');
   }
 
   const mailOptions = {
@@ -156,6 +202,17 @@ export async function sendDailyDigest(dateStr = null) {
     html
   };
 
-  const info = await transporter.sendMail(mailOptions);
-  return { success: true, messageId: info.messageId, recipient };
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    return { success: true, messageId: info.messageId, recipient, provider: 'smtp' };
+  } catch (err) {
+    console.error('SMTP send error:', err);
+    if (err.code === 'ETIMEDOUT' || err.code === 'ESOCKET' || err.message?.includes('timeout')) {
+      throw new Error('SMTP 連線超時：Render 免費版雲端防火牆阻擋了外發 SMTP 埠 (587/465)。建議改用「📲 手機郵件 App 寄送」或在設定中填寫免費 Resend API Key！');
+    }
+    if (err.code === 'EAUTH' || err.message?.includes('Invalid login') || err.message?.includes('Username and Password not accepted')) {
+      throw new Error('Gmail 驗證失敗：請填寫 Google 帳號安全性產生的 16 碼「應用程式專用密碼」，而非一般 Google 登入密碼！');
+    }
+    throw new Error(`SMTP 發送失敗: ${err.message}`);
+  }
 }

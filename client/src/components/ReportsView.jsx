@@ -13,7 +13,9 @@ import {
   ChevronLeft,
   ChevronRight,
   RotateCcw,
-  CheckCircle2
+  CheckCircle2,
+  Share2,
+  Smartphone
 } from 'lucide-react';
 import { getLocalDateStr, stepDateStr, formatFriendlyDate } from '../utils/dateUtils';
 
@@ -83,22 +85,85 @@ export default function ReportsView({ currentDate, onDataChanged }) {
     setIsSending(true);
     setStatusMsg('');
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s client timeout
+
       const res = await fetch('/api/send-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: reportDate })
+        body: JSON.stringify({ date: reportDate }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || '發送失敗，請確認 SMTP 設定');
+      let data = {};
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        data = { error: `雲端主機回應異常 (HTTP ${res.status})` };
       }
 
-      showFeedback(`✅ 已成功發送結報至 ${data.recipient || '指定信箱'}！`, 'success', 5000);
+      if (!res.ok) {
+        throw new Error(data.error || '發送失敗，請確認郵件設定');
+      }
+
+      showFeedback(`✅ 已成功發送結報至 ${data.recipient || '指定信箱'}！`, 'success', 6000);
     } catch (err) {
-      showFeedback(`⚠️ 發送失敗: ${err.message} (請至右上角⚙️設定填寫 Gmail 應用程式密碼)`, 'error', 6000);
+      console.error('Send report error:', err);
+      if (err.name === 'AbortError') {
+        showFeedback('⚠️ 發送逾時：Render 免費版雲端防火牆阻擋了外發 SMTP 連線。建議點選「📲 手機郵件 App」一鍵寄出！', 'error', 9000);
+      } else {
+        showFeedback(`⚠️ ${err.message}`, 'error', 9000);
+      }
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const handleSendViaNativeMail = () => {
+    if (!dailySummary) return;
+    const isDef = (dailySummary.deficit ?? 0) >= 0;
+    const defTxt = isDef ? `赤字 -${dailySummary.deficit}` : `盈餘 +${Math.abs(dailySummary.deficit || 0)}`;
+    const subject = encodeURIComponent(`【每日健康結報】${reportDate} 攝取 ${dailySummary.totalCalories || 0} kcal (${defTxt} kcal)`);
+    
+    let bodyText = `【每日飲食與體重結報】\n日期：${reportDate}\n\n`;
+    bodyText += `🔥 今日總攝取：${dailySummary.totalCalories || 0} kcal (維持目標: ${dailySummary.targetCalories || 1900} kcal)\n`;
+    bodyText += `⚖️ TDEE 淨盈虧：${defTxt} kcal (維持熱量: ${dailySummary.tdee || 2200} kcal)\n`;
+    bodyText += `🏃 今日體重：${dailySummary.weight ? dailySummary.weight + ' kg' : '未記錄'}\n\n`;
+    bodyText += `🥩 三大營養素：\n- 蛋白質：${dailySummary.totalProtein || 0}g\n- 碳水化合物：${dailySummary.totalCarbs || 0}g\n- 脂肪：${dailySummary.totalFat || 0}g\n- 膳食纖維：${dailySummary.totalFiber || 0}g\n\n`;
+    bodyText += `📋 今日餐點明細 (${dailySummary.meals?.length || 0} 餐)：\n`;
+    (dailySummary.meals || []).forEach(m => {
+      bodyText += `- [${m.time || '--:--'}] ${m.foodName} (${m.estimatedWeightG || 0}g) : ${m.calories || 0} kcal\n`;
+    });
+    bodyText += `\n-- 來自 智慧飲食與體重管家`;
+
+    window.location.href = `mailto:?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
+  };
+
+  const handleShareReport = async () => {
+    if (!dailySummary) return;
+    const isDef = (dailySummary.deficit ?? 0) >= 0;
+    const defTxt = isDef ? `赤字 -${dailySummary.deficit}` : `盈餘 +${Math.abs(dailySummary.deficit || 0)}`;
+    let shareText = `🥗【每日健康結報 - ${reportDate}】\n`;
+    shareText += `🔥 總攝取：${dailySummary.totalCalories || 0} kcal / ${dailySummary.targetCalories || 1900}\n`;
+    shareText += `⚖️ TDEE 盈虧：${defTxt} kcal\n`;
+    if (dailySummary.weight) shareText += `🏃 體重：${dailySummary.weight} kg\n`;
+    shareText += `🥩 蛋白質 ${dailySummary.totalProtein || 0}g | 🍚 碳水 ${dailySummary.totalCarbs || 0}g | 🥑 脂肪 ${dailySummary.totalFat || 0}g\n`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `健康結報 - ${reportDate}`,
+          text: shareText
+        });
+      } catch (e) {}
+    } else {
+      try {
+        await navigator.clipboard.writeText(shareText);
+        showFeedback('📋 結報摘要已複製到剪貼簿，可直接貼到 LINE！', 'success', 4000);
+      } catch (e) {
+        showFeedback('複製失敗，請手動選取複製', 'error');
+      }
     }
   };
 
@@ -232,11 +297,12 @@ export default function ReportsView({ currentDate, onDataChanged }) {
           系統支援每日 22:00 自動結算發送，亦可手動觸發。郵件將統整 <strong className="text-emerald-300 font-bold">{reportDate}</strong> 的總熱量、TDEE 赤字、三大營養素與餐點明細。
         </p>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2.5">
           <button
             onClick={handleSendEmail}
             disabled={isSending}
-            className="py-3 px-3 rounded-2xl bg-emerald-500 hover:bg-emerald-600 font-semibold text-xs text-white flex items-center justify-center gap-2 transition active:scale-95 disabled:opacity-60 shadow-md shadow-emerald-500/30"
+            className="py-3 px-3 rounded-2xl bg-emerald-500 hover:bg-emerald-600 font-semibold text-xs text-white flex items-center justify-center gap-1.5 transition active:scale-95 disabled:opacity-60 shadow-md shadow-emerald-500/30"
+            title="由伺服器自動發送 Email"
           >
             {isSending ? (
               <>
@@ -252,8 +318,26 @@ export default function ReportsView({ currentDate, onDataChanged }) {
           </button>
 
           <button
+            onClick={handleSendViaNativeMail}
+            className="py-3 px-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 font-semibold text-xs text-white flex items-center justify-center gap-1.5 transition active:scale-95 shadow-md shadow-indigo-600/30"
+            title="開啟手機內建郵件 App 直接寄出（免設 SMTP・保證不被雲端防火牆阻擋）"
+          >
+            <Smartphone size={15} />
+            <span>手機郵件 App 寄出</span>
+          </button>
+
+          <button
+            onClick={handleShareReport}
+            className="py-2.5 px-3 rounded-2xl bg-white/10 hover:bg-white/20 font-medium text-xs text-white flex items-center justify-center gap-1.5 transition active:scale-95 border border-white/10"
+            title="分享至 LINE 或複製結報文字"
+          >
+            <Share2 size={15} />
+            <span>分享 / 複製摘要</span>
+          </button>
+
+          <button
             onClick={() => setPreviewOpen(true)}
-            className="py-3 px-3 rounded-2xl bg-white/10 hover:bg-white/20 font-medium text-xs text-white flex items-center justify-center gap-2 transition active:scale-95 border border-white/10"
+            className="py-2.5 px-3 rounded-2xl bg-white/10 hover:bg-white/20 font-medium text-xs text-white flex items-center justify-center gap-1.5 transition active:scale-95 border border-white/10"
           >
             <Eye size={15} />
             <span>預覽 Email 格式</span>

@@ -550,6 +550,26 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
                     className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 font-mono"
                   />
                 </div>
+
+                <div className="pt-2 border-t border-slate-100">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] text-slate-600 font-medium">或使用 Resend 免費 API Key (免設 SMTP・保證不被 Render 封鎖)</label>
+                    <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">推薦</span>
+                  </div>
+                  <input
+                    type="password"
+                    placeholder="re_..."
+                    value={settings.notifications.resendApiKey || ''}
+                    onChange={(e) => setSettings({
+                      ...settings,
+                      notifications: { ...settings.notifications, resendApiKey: e.target.value }
+                    })}
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 font-mono"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    Render 免費版主機會阻擋 SMTP 埠 (587/465)。若遇連線問題，可至 resend.com 免費取得 Key（每月 3000 封免費），走 HTTPS 443 永不被擋！
+                  </span>
+                </div>
               </div>
             </div>
           )}
