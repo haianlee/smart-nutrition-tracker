@@ -6,32 +6,52 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
 
-  const [settings, setSettings] = useState({
-    geminiApiKey: '',
-    geminiModel: 'gemini-3.8-flash',
-    userProfile: {
-      gender: 'male',
-      age: 28,
-      heightCm: 175,
-      weightKg: 70,
-      activityLevel: 'moderate'
-    },
-    tdee: 2200,
-    targetCalories: 1900,
-    targetMacros: {
-      proteinG: 130,
-      carbsG: 200,
-      fatG: 60
-    },
-    notifications: {
-      emailRecipient: '',
-      smtpHost: 'smtp.gmail.com',
-      smtpPort: 587,
-      smtpSecure: false,
-      smtpUser: '',
-      smtpPass: '',
-      dailyDigestEnabled: true,
-      dailyDigestTime: '22:00'
+  const [settings, setSettings] = useState(() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem('nt_settings') || '{}');
+      return {
+        geminiApiKey: localStorage.getItem('gemini_api_key') || cached.geminiApiKey || '',
+        geminiModel: cached.geminiModel || 'gemini-3.8-flash',
+        userProfile: {
+          gender: 'male',
+          age: 28,
+          heightCm: 175,
+          weightKg: 70,
+          activityLevel: 'moderate',
+          ...(cached.userProfile || {})
+        },
+        tdee: cached.tdee || 2200,
+        targetCalories: cached.targetCalories || 1900,
+        targetMacros: {
+          proteinG: 130,
+          carbsG: 200,
+          fatG: 60,
+          ...(cached.targetMacros || {})
+        },
+        notifications: {
+          emailRecipient: '',
+          smtpHost: 'smtp.gmail.com',
+          smtpPort: 587,
+          smtpSecure: false,
+          smtpUser: '',
+          smtpPass: '',
+          dailyDigestEnabled: true,
+          dailyDigestTime: '22:00',
+          ...(cached.notifications || {})
+        },
+        isCustomized: cached.isCustomized || false
+      };
+    } catch (e) {
+      return {
+        geminiApiKey: '',
+        geminiModel: 'gemini-3.8-flash',
+        userProfile: { gender: 'male', age: 28, heightCm: 175, weightKg: 70, activityLevel: 'moderate' },
+        tdee: 2200,
+        targetCalories: 1900,
+        targetMacros: { proteinG: 130, carbsG: 200, fatG: 60 },
+        notifications: { emailRecipient: '', smtpHost: 'smtp.gmail.com', smtpPort: 587, smtpSecure: false, smtpUser: '', smtpPass: '', dailyDigestEnabled: true, dailyDigestTime: '22:00' },
+        isCustomized: false
+      };
     }
   });
 
@@ -51,15 +71,42 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
           setSettings(prev => {
             const cachedNotif = cachedSettings.notifications || {};
             const serverNotif = data.notifications || {};
-            // If server fields are empty (e.g. wiped after Render redeployment), preserve cached values
+            const serverIsDefault = !data.isCustomized;
+            const hasCached = cachedSettings && (cachedSettings.isCustomized || cachedSettings.userProfile);
+
+            // User profile: If server is default or phone has cached customized profile, phone's cached userProfile wins!
+            const mergedProfile = (hasCached && cachedSettings.userProfile)
+              ? { ...prev.userProfile, ...cachedSettings.userProfile }
+              : { ...prev.userProfile, ...(data.userProfile || {}) };
+
+            const mergedMacros = (hasCached && cachedSettings.targetMacros)
+              ? { ...prev.targetMacros, ...cachedSettings.targetMacros }
+              : { ...prev.targetMacros, ...(data.targetMacros || {}) };
+
+            const mergedTdee = (hasCached && cachedSettings.tdee)
+              ? cachedSettings.tdee
+              : (data.tdee || prev.tdee);
+
+            const mergedTargetCalories = (hasCached && cachedSettings.targetCalories)
+              ? cachedSettings.targetCalories
+              : (data.targetCalories || prev.targetCalories);
+
             const mergedNotifications = {
               ...prev.notifications,
               ...cachedNotif,
               ...serverNotif,
-              emailRecipient: serverNotif.emailRecipient || cachedNotif.emailRecipient || prev.notifications.emailRecipient || '',
-              smtpHost: serverNotif.smtpHost || cachedNotif.smtpHost || prev.notifications.smtpHost || 'smtp.gmail.com',
-              smtpPort: serverNotif.smtpPort || cachedNotif.smtpPort || prev.notifications.smtpPort || 587,
-              smtpUser: serverNotif.smtpUser || cachedNotif.smtpUser || prev.notifications.smtpUser || '',
+              emailRecipient: (serverIsDefault && cachedSettings?.notifications?.emailRecipient) 
+                ? cachedSettings.notifications.emailRecipient 
+                : (serverNotif.emailRecipient || cachedNotif.emailRecipient || prev.notifications.emailRecipient || ''),
+              smtpHost: (serverIsDefault && cachedSettings?.notifications?.smtpHost)
+                ? cachedSettings.notifications.smtpHost
+                : (serverNotif.smtpHost || cachedNotif.smtpHost || prev.notifications.smtpHost || 'smtp.gmail.com'),
+              smtpPort: (serverIsDefault && cachedSettings?.notifications?.smtpPort)
+                ? cachedSettings.notifications.smtpPort
+                : (serverNotif.smtpPort || cachedNotif.smtpPort || prev.notifications.smtpPort || 587),
+              smtpUser: (serverIsDefault && cachedSettings?.notifications?.smtpUser)
+                ? cachedSettings.notifications.smtpUser
+                : (serverNotif.smtpUser || cachedNotif.smtpUser || prev.notifications.smtpUser || ''),
               smtpPass: (serverNotif.smtpPass && serverNotif.smtpPass !== '********')
                 ? serverNotif.smtpPass
                 : (cachedNotif.smtpPass || serverNotif.smtpPass || prev.notifications.smtpPass || ''),
@@ -71,16 +118,20 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
 
             const newSettings = {
               ...prev,
-              ...cachedSettings,
               ...data,
+              ...(hasCached ? cachedSettings : {}),
+              userProfile: mergedProfile,
+              targetMacros: mergedMacros,
+              tdee: mergedTdee,
+              targetCalories: mergedTargetCalories,
               geminiApiKey: data.geminiApiKey || cachedKey || cachedSettings.geminiApiKey || prev.geminiApiKey,
-              userProfile: { ...prev.userProfile, ...(cachedSettings.userProfile || {}), ...(data.userProfile || {}) },
-              targetMacros: { ...prev.targetMacros, ...(cachedSettings.targetMacros || {}), ...(data.targetMacros || {}) },
-              notifications: mergedNotifications
+              notifications: mergedNotifications,
+              isCustomized: true
             };
 
-            // If server notifications were empty but local storage had them, push back to server to restore it!
-            if (!serverNotif.emailRecipient && cachedNotif.emailRecipient) {
+            // If server is clean/wiped default, auto-restore entire settings to server!
+            if (serverIsDefault && hasCached) {
+              console.log('🔄 偵測到伺服器設定為全新預設值，手機端自動將體態、TDEE 與通報設定還原至伺服器...');
               fetch('/api/settings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -139,7 +190,8 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
       userProfile: updatedProfile,
       tdee,
       targetCalories: targetCal,
-      targetMacros: { proteinG, carbsG, fatG }
+      targetMacros: { proteinG, carbsG, fatG },
+      isCustomized: true
     });
   };
 
@@ -154,6 +206,8 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
       
       const toSave = {
         ...settings,
+        isCustomized: true,
+        updatedAt: new Date().toISOString(),
         notifications: {
           ...settings.notifications,
           smtpPass: settings.notifications.smtpPass === '********'

@@ -41,6 +41,8 @@ const defaultData = {
   meals: [],
   weights: [],
   settings: {
+    isCustomized: false,
+    updatedAt: null,
     geminiApiKey: process.env.GEMINI_API_KEY || '',
     geminiModel: 'gemini-3.8-flash',
     userProfile: {
@@ -249,6 +251,8 @@ export const db = {
     data.settings = {
       ...data.settings,
       ...newSettings,
+      isCustomized: true,
+      updatedAt: new Date().toISOString(),
       userProfile: {
         ...data.settings.userProfile,
         ...(newSettings.userProfile || {})
@@ -442,6 +446,8 @@ export const db = {
       data.settings = {
         ...data.settings,
         ...settings,
+        isCustomized: true,
+        updatedAt: settings.updatedAt || new Date().toISOString(),
         userProfile: { ...data.settings.userProfile, ...(settings.userProfile || {}) },
         targetMacros: { ...data.settings.targetMacros, ...(settings.targetMacros || {}) },
         notifications: {

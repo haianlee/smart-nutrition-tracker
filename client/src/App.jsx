@@ -16,10 +16,29 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [mealsForDate, setMealsForDate] = useState([]);
   const [weights, setWeights] = useState([]);
-  const [settings, setSettings] = useState({
-    tdee: 2200,
-    targetCalories: 1900,
-    userProfile: { heightCm: 175 }
+  const [settings, setSettings] = useState(() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem('nt_settings') || '{}');
+      return {
+        tdee: cached.tdee || 2200,
+        targetCalories: cached.targetCalories || 1900,
+        userProfile: {
+          gender: 'male',
+          age: 28,
+          heightCm: 175,
+          weightKg: 70,
+          activityLevel: 'moderate',
+          ...(cached.userProfile || {})
+        },
+        ...cached
+      };
+    } catch (e) {
+      return {
+        tdee: 2200,
+        targetCalories: 1900,
+        userProfile: { gender: 'male', age: 28, heightCm: 175, weightKg: 70, activityLevel: 'moderate' }
+      };
+    }
   });
 
   const fetchMealsForDate = async (date) => {
@@ -43,6 +62,9 @@ export default function App() {
       const cachedWeights = JSON.parse(localStorage.getItem('nt_all_weights') || '[]');
       const cachedSettings = JSON.parse(localStorage.getItem('nt_settings') || 'null');
 
+      if (cachedSettings) {
+        setSettings(prev => ({ ...prev, ...cachedSettings }));
+      }
       if (cachedWeights.length > 0 && weights.length === 0) {
         setWeights(cachedWeights);
       }
@@ -83,26 +105,46 @@ export default function App() {
         await fetchMealsForDate(selectedDate);
       }
 
-      // Fetch settings
+      // 3. Fetch and restore settings (Profile, TDEE, Notifications)
       const settingsRes = await fetch('/api/settings');
       if (settingsRes.ok) {
         const data = await settingsRes.json();
-        // If server settings were wiped (empty emailRecipient) but phone has saved notifications, auto-restore
-        if (cachedSettings && cachedSettings.notifications?.emailRecipient && !data.notifications?.emailRecipient) {
-          console.log('🔄 伺服器郵件通報設定為空，自動從手機端還原設定...');
+        const serverIsDefault = !data.isCustomized;
+        const hasCached = cachedSettings && (cachedSettings.isCustomized || cachedSettings.userProfile);
+
+        // If server settings were wiped by Render redeployment, auto-restore entire cached settings!
+        if (serverIsDefault && hasCached) {
+          console.log('🔄 偵測到伺服器設定為全新預設值，手機端自動向伺服器同步還原個人體態與通報設定...');
+          const mergedToRestore = {
+            ...data,
+            ...cachedSettings,
+            isCustomized: true
+          };
           await fetch('/api/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(cachedSettings)
+            body: JSON.stringify(mergedToRestore)
           });
-          setSettings(cachedSettings);
+          setSettings(mergedToRestore);
         } else {
-          setSettings(data);
-          if (data.notifications?.emailRecipient) {
+          // If phone has cached userProfile, ensure it takes precedence over server uncustomized values
+          const activeSettings = {
+            ...data,
+            ...(hasCached ? {
+              userProfile: { ...(data.userProfile || {}), ...(cachedSettings.userProfile || {}) },
+              tdee: cachedSettings.tdee || data.tdee,
+              targetCalories: cachedSettings.targetCalories || data.targetCalories,
+              targetMacros: { ...(data.targetMacros || {}), ...(cachedSettings.targetMacros || {}) }
+            } : {})
+          };
+          setSettings(activeSettings);
+
+          if (data.isCustomized || data.notifications?.emailRecipient) {
             const currentLocal = JSON.parse(localStorage.getItem('nt_settings') || '{}');
             localStorage.setItem('nt_settings', JSON.stringify({
               ...currentLocal,
-              ...data,
+              ...activeSettings,
+              isCustomized: true,
               notifications: {
                 ...currentLocal.notifications,
                 ...data.notifications,
