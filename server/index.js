@@ -6,7 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 
-import { db } from './db.js';
+import { db, getSystemDateStr } from './db.js';
 import { analyzeFoodWithGemini } from './gemini.js';
 import { sendDailyDigest, buildDailyReportHtml } from './mailer.js';
 import { initScheduler } from './scheduler.js';
@@ -245,12 +245,15 @@ app.get('/api/preview-report-html', (req, res) => {
 // 8. Seed Realistic Demo Data (Past 14 days)
 app.post('/api/seed-demo', (req, res) => {
   try {
-    const now = new Date();
+    const today = getSystemDateStr();
+    const [ty, tm, td] = today.split('-').map(Number);
     // Seed 14 days of realistic meals and weights
     for (let i = 13; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
+      const d = new Date(ty, tm - 1, td - i);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const dateStr = `${y}-${m}-${day}`;
 
       // Weight with realistic natural fluctuations
       const baseWeight = 72.5;
@@ -323,7 +326,7 @@ app.get('/api/export-csv', (req, res) => {
     });
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename=nutrition_weight_data_${new Date().toISOString().split('T')[0]}.csv`);
+    res.setHeader('Content-Disposition', `attachment; filename=nutrition_weight_data_${getSystemDateStr()}.csv`);
     res.send(csv);
   } catch (err) {
     res.status(500).send(err.message);
@@ -351,7 +354,7 @@ app.get('/api/backup-json', (req, res) => {
   try {
     const allData = db.getAllData();
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename=nutrition_tracker_backup_${new Date().toISOString().split('T')[0]}.json`);
+    res.setHeader('Content-Disposition', `attachment; filename=nutrition_tracker_backup_${getSystemDateStr()}.json`);
     res.send(JSON.stringify(allData, null, 2));
   } catch (err) {
     res.status(500).send(err.message);

@@ -15,6 +15,7 @@ import {
   ChevronRight,
   RotateCcw
 } from 'lucide-react';
+import { getLocalDateStr, getLocalTimeStr, stepDateStr } from '../utils/dateUtils';
 
 export default function FoodCapture({
   selectedDate,
@@ -25,8 +26,8 @@ export default function FoodCapture({
   onMealDeleted,
   onRefresh
 }) {
-  const todayStr = new Date().toISOString().split('T')[0];
-  const nowTime = new Date().toTimeString().slice(0, 5);
+  const todayStr = getLocalDateStr();
+  const nowTime = getLocalTimeStr();
 
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
@@ -47,19 +48,15 @@ export default function FoodCapture({
 
   // Date navigation helpers
   const handlePrevDay = () => {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() - 1);
-    setSelectedDate(d.toISOString().split('T')[0]);
+    setSelectedDate(prev => stepDateStr(prev, -1));
   };
 
   const handleNextDay = () => {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() + 1);
-    setSelectedDate(d.toISOString().split('T')[0]);
+    setSelectedDate(prev => stepDateStr(prev, 1));
   };
 
   const handleToday = () => {
-    setSelectedDate(todayStr);
+    setSelectedDate(getLocalDateStr());
   };
 
   const handleImageChange = (e) => {

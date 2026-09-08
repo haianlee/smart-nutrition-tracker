@@ -11,6 +11,32 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+export function getSystemDateStr() {
+  const now = new Date();
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: process.env.TZ || 'Asia/Taipei' }).format(now);
+  } catch (e) {
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+}
+
+export function getSystemTimeStr() {
+  const now = new Date();
+  try {
+    return new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: process.env.TZ || 'Asia/Taipei'
+    }).format(now);
+  } catch (e) {
+    return now.toTimeString().slice(0, 5);
+  }
+}
+
 const defaultData = {
   meals: [],
   weights: [],
@@ -93,8 +119,8 @@ export const db = {
     const data = readDb();
     const newMeal = {
       id: `m_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-      date: meal.date || new Date().toISOString().split('T')[0],
-      time: meal.time || new Date().toTimeString().slice(0, 5),
+      date: meal.date || getSystemDateStr(),
+      time: meal.time || getSystemTimeStr(),
       mealType: meal.mealType || 'lunch', // breakfast, lunch, dinner, snack
       foodName: meal.foodName || '未知食物',
       estimatedWeightG: Number(meal.estimatedWeightG) || 0,
@@ -171,13 +197,13 @@ export const db = {
 
   addOrUpdateWeight(entry) {
     const data = readDb();
-    const date = entry.date || new Date().toISOString().split('T')[0];
+    const date = entry.date || getSystemDateStr();
     const index = data.weights.findIndex(w => w.date === date);
     
     const record = {
       id: index >= 0 ? data.weights[index].id : `w_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
       date,
-      time: entry.time || new Date().toTimeString().slice(0, 5),
+      time: entry.time || getSystemTimeStr(),
       weightKg: parseFloat(Number(entry.weightKg).toFixed(2)),
       bodyFatPct: entry.bodyFatPct !== undefined && entry.bodyFatPct !== null && entry.bodyFatPct !== '' ? parseFloat(Number(entry.bodyFatPct).toFixed(1)) : null,
       notes: entry.notes || '',
@@ -235,12 +261,15 @@ export const db = {
   // --- STATS & CONTINUOUS TREND CALCULATION ---
   getContinuousTrends(days = 30) {
     const data = readDb();
-    const targetDate = new Date();
+    const todayStr = getSystemDateStr();
+    const [ty, tm, td] = todayStr.split('-').map(Number);
     const dateList = [];
     for (let i = days - 1; i >= 0; i--) {
-      const d = new Date(targetDate);
-      d.setDate(d.getDate() - i);
-      dateList.push(d.toISOString().split('T')[0]);
+      const d = new Date(ty, tm - 1, td - i);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      dateList.push(`${y}-${m}-${day}`);
     }
 
     const tdee = data.settings.tdee || 2200;
@@ -277,9 +306,12 @@ export const db = {
       let windowSum = 0;
       let windowCount = 0;
       for (let offset = 0; offset < 7; offset++) {
-        const pastD = new Date(dateStr);
-        pastD.setDate(pastD.getDate() - offset);
-        const pastDateStr = pastD.toISOString().split('T')[0];
+        const [py, pm, pd] = dateStr.split('-').map(Number);
+        const pastD = new Date(py, pm - 1, pd - offset);
+        const y = pastD.getFullYear();
+        const m = String(pastD.getMonth() + 1).padStart(2, '0');
+        const day = String(pastD.getDate()).padStart(2, '0');
+        const pastDateStr = `${y}-${m}-${day}`;
         const val = weightMap.get(pastDateStr);
         if (val !== undefined && val !== null) {
           windowSum += val;
@@ -312,7 +344,7 @@ export const db = {
 
   getDailySummary(dateStr) {
     const data = readDb();
-    const date = dateStr || new Date().toISOString().split('T')[0];
+    const date = dateStr || getSystemDateStr();
     const meals = data.meals.filter(m => m.date === date);
     const weightRecord = data.weights.find(w => w.date === date);
 
@@ -330,8 +362,8 @@ export const db = {
       totalFiber += Number(m.macros?.fiberG) || 0;
     });
 
-    const tdee = data.settings.tdee || 2200;
-    const targetCalories = data.settings.targetCalories || 1900;
+    const tdee = data.settings?.tdee || 2200;
+    const targetCalories = data.settings?.targetCalories || 1900;
     const deficit = tdee - totalCalories;
 
     return {
@@ -339,7 +371,7 @@ export const db = {
       weight: weightRecord ? weightRecord.weightKg : null,
       bodyFat: weightRecord ? weightRecord.bodyFatPct : null,
       mealCount: meals.length,
-      meals: meals.sort((a, b) => a.time.localeCompare(b.time)),
+      meals: meals.sort((a, b) => (a.time || '').localeCompare(b.time || '')),
       totalCalories,
       totalProtein,
       totalCarbs,

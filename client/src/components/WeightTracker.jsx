@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Scale, Plus, Trash2, Calendar, TrendingDown, TrendingUp, Check, AlertCircle } from 'lucide-react';
+import { Scale, Plus, Trash2, Calendar, TrendingDown, TrendingUp, Check } from 'lucide-react';
+import { getLocalDateStr, getLocalTimeStr } from '../utils/dateUtils';
 
 export default function WeightTracker({ weights, onWeightSaved, onWeightDeleted, heightCm = 175 }) {
-  const todayStr = new Date().toISOString().split('T')[0];
-  const nowTime = new Date().toTimeString().slice(0, 5);
+  const todayStr = getLocalDateStr();
+  const nowTime = getLocalTimeStr();
 
   const [date, setDate] = useState(todayStr);
   const [time, setTime] = useState(nowTime);

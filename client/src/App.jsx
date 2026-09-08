@@ -6,11 +6,13 @@ import WeightTracker from './components/WeightTracker';
 import ChartsView from './components/ChartsView';
 import ReportsView from './components/ReportsView';
 import SettingsModal from './components/SettingsModal';
+import ErrorBoundary from './components/ErrorBoundary';
+import { getLocalDateStr } from './utils/dateUtils';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('food');
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateStr();
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [mealsForDate, setMealsForDate] = useState([]);
   const [weights, setWeights] = useState([]);
@@ -170,37 +172,42 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-2xl w-full mx-auto p-4 sm:p-5">
-        {activeTab === 'food' && (
-          <FoodCapture
-            selectedDate={selectedDate}
-            setSelectedDate={setSelectedDate}
-            meals={mealsForDate}
-            onMealAdded={handleMealAdded}
-            onMealUpdated={handleMealUpdated}
-            onMealDeleted={handleMealDeleted}
-            onRefresh={fetchAllData}
-          />
-        )}
+        <ErrorBoundary>
+          {activeTab === 'food' && (
+            <FoodCapture
+              selectedDate={selectedDate}
+              setSelectedDate={setSelectedDate}
+              meals={mealsForDate}
+              onMealAdded={handleMealAdded}
+              onMealUpdated={handleMealUpdated}
+              onMealDeleted={handleMealDeleted}
+              onRefresh={fetchAllData}
+            />
+          )}
 
-        {activeTab === 'weight' && (
-          <WeightTracker
-            weights={weights}
-            onWeightSaved={handleWeightSaved}
-            onWeightDeleted={handleWeightDeleted}
-            heightCm={settings.userProfile?.heightCm || 175}
-          />
-        )}
+          {activeTab === 'weight' && (
+            <WeightTracker
+              weights={weights}
+              onWeightSaved={handleWeightSaved}
+              onWeightDeleted={handleWeightDeleted}
+              heightCm={settings.userProfile?.heightCm || 175}
+            />
+          )}
 
-        {activeTab === 'charts' && (
-          <ChartsView
-            tdee={settings.tdee || 2200}
-            targetCalories={settings.targetCalories || 1900}
-          />
-        )}
+          {activeTab === 'charts' && (
+            <ChartsView
+              tdee={settings.tdee || 2200}
+              targetCalories={settings.targetCalories || 1900}
+            />
+          )}
 
-        {activeTab === 'reports' && (
-          <ReportsView onDataChanged={fetchAllData} />
-        )}
+          {activeTab === 'reports' && (
+            <ReportsView
+              currentDate={selectedDate}
+              onDataChanged={fetchAllData}
+            />
+          )}
+        </ErrorBoundary>
       </main>
 
       {/* Fixed Bottom Navigation */}
