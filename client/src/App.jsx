@@ -41,6 +41,8 @@ export default function App() {
       // 1. Immediately show cached data from phone storage
       const cachedMeals = JSON.parse(localStorage.getItem('nt_all_meals') || '[]');
       const cachedWeights = JSON.parse(localStorage.getItem('nt_all_weights') || '[]');
+      const cachedSettings = JSON.parse(localStorage.getItem('nt_settings') || 'null');
+
       if (cachedWeights.length > 0 && weights.length === 0) {
         setWeights(cachedWeights);
       }
@@ -57,11 +59,15 @@ export default function App() {
 
       // If server has fewer items than local phone cache (e.g. Render redeploy wiped server disk), auto-restore!
       if (cachedMeals.length > allServerMeals.length || cachedWeights.length > allServerWeights.length) {
-        console.log('🔄 偵測到雲端新部署重置，手機端自動向伺服器同步還原舊紀錄...');
+        console.log('🔄 偵測到雲端新部署重置，手機端自動向伺服器同步還原舊紀錄與設定...');
         await fetch('/api/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ meals: cachedMeals, weights: cachedWeights })
+          body: JSON.stringify({
+            meals: cachedMeals,
+            weights: cachedWeights,
+            settings: cachedSettings
+          })
         });
         await fetchMealsForDate(selectedDate);
         setWeights(cachedWeights);
@@ -81,7 +87,32 @@ export default function App() {
       const settingsRes = await fetch('/api/settings');
       if (settingsRes.ok) {
         const data = await settingsRes.json();
-        setSettings(data);
+        // If server settings were wiped (empty emailRecipient) but phone has saved notifications, auto-restore
+        if (cachedSettings && cachedSettings.notifications?.emailRecipient && !data.notifications?.emailRecipient) {
+          console.log('🔄 伺服器郵件通報設定為空，自動從手機端還原設定...');
+          await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cachedSettings)
+          });
+          setSettings(cachedSettings);
+        } else {
+          setSettings(data);
+          if (data.notifications?.emailRecipient) {
+            const currentLocal = JSON.parse(localStorage.getItem('nt_settings') || '{}');
+            localStorage.setItem('nt_settings', JSON.stringify({
+              ...currentLocal,
+              ...data,
+              notifications: {
+                ...currentLocal.notifications,
+                ...data.notifications,
+                smtpPass: (data.notifications?.smtpPass && data.notifications.smtpPass !== '********')
+                  ? data.notifications.smtpPass
+                  : (currentLocal.notifications?.smtpPass || '')
+              }
+            }));
+          }
+        }
       }
     } catch (err) {
       console.error('Sync error (using phone offline cache):', err);

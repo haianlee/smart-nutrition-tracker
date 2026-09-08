@@ -238,6 +238,14 @@ export const db = {
 
   updateSettings(newSettings) {
     const data = readDb();
+    const sanitizedNotifications = { ...(newSettings.notifications || {}) };
+    if (sanitizedNotifications.smtpPass === '********') {
+      if (data.settings.notifications?.smtpPass) {
+        sanitizedNotifications.smtpPass = data.settings.notifications.smtpPass;
+      } else {
+        delete sanitizedNotifications.smtpPass;
+      }
+    }
     data.settings = {
       ...data.settings,
       ...newSettings,
@@ -251,7 +259,7 @@ export const db = {
       },
       notifications: {
         ...data.settings.notifications,
-        ...(newSettings.notifications || {})
+        ...sanitizedNotifications
       }
     };
     writeDb(data);
@@ -423,12 +431,23 @@ export const db = {
     data.weights = Array.from(weightMap.values());
 
     if (settings) {
+      const sanitizedNotifications = { ...(settings.notifications || {}) };
+      if (sanitizedNotifications.smtpPass === '********') {
+        if (data.settings.notifications?.smtpPass) {
+          sanitizedNotifications.smtpPass = data.settings.notifications.smtpPass;
+        } else {
+          delete sanitizedNotifications.smtpPass;
+        }
+      }
       data.settings = {
         ...data.settings,
         ...settings,
         userProfile: { ...data.settings.userProfile, ...(settings.userProfile || {}) },
         targetMacros: { ...data.settings.targetMacros, ...(settings.targetMacros || {}) },
-        notifications: { ...data.settings.notifications, ...(settings.notifications || {}) }
+        notifications: {
+          ...data.settings.notifications,
+          ...sanitizedNotifications
+        }
       };
     }
 

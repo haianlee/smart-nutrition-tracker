@@ -38,19 +38,70 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
   useEffect(() => {
     if (isOpen) {
       const cachedKey = localStorage.getItem('gemini_api_key') || '';
+      let cachedSettings = {};
+      try {
+        cachedSettings = JSON.parse(localStorage.getItem('nt_settings') || '{}');
+      } catch (e) {
+        cachedSettings = {};
+      }
+
       fetch('/api/settings')
         .then(res => res.json())
         .then(data => {
-          setSettings(prev => ({
-            ...prev,
-            ...data,
-            geminiApiKey: data.geminiApiKey || cachedKey || prev.geminiApiKey,
-            userProfile: { ...prev.userProfile, ...(data.userProfile || {}) },
-            targetMacros: { ...prev.targetMacros, ...(data.targetMacros || {}) },
-            notifications: { ...prev.notifications, ...(data.notifications || {}) }
-          }));
+          setSettings(prev => {
+            const cachedNotif = cachedSettings.notifications || {};
+            const serverNotif = data.notifications || {};
+            // If server fields are empty (e.g. wiped after Render redeployment), preserve cached values
+            const mergedNotifications = {
+              ...prev.notifications,
+              ...cachedNotif,
+              ...serverNotif,
+              emailRecipient: serverNotif.emailRecipient || cachedNotif.emailRecipient || prev.notifications.emailRecipient || '',
+              smtpHost: serverNotif.smtpHost || cachedNotif.smtpHost || prev.notifications.smtpHost || 'smtp.gmail.com',
+              smtpPort: serverNotif.smtpPort || cachedNotif.smtpPort || prev.notifications.smtpPort || 587,
+              smtpUser: serverNotif.smtpUser || cachedNotif.smtpUser || prev.notifications.smtpUser || '',
+              smtpPass: (serverNotif.smtpPass && serverNotif.smtpPass !== '********')
+                ? serverNotif.smtpPass
+                : (cachedNotif.smtpPass || serverNotif.smtpPass || prev.notifications.smtpPass || ''),
+              dailyDigestEnabled: serverNotif.dailyDigestEnabled !== undefined 
+                ? serverNotif.dailyDigestEnabled 
+                : (cachedNotif.dailyDigestEnabled !== undefined ? cachedNotif.dailyDigestEnabled : prev.notifications.dailyDigestEnabled),
+              dailyDigestTime: serverNotif.dailyDigestTime || cachedNotif.dailyDigestTime || prev.notifications.dailyDigestTime || '22:00'
+            };
+
+            const newSettings = {
+              ...prev,
+              ...cachedSettings,
+              ...data,
+              geminiApiKey: data.geminiApiKey || cachedKey || cachedSettings.geminiApiKey || prev.geminiApiKey,
+              userProfile: { ...prev.userProfile, ...(cachedSettings.userProfile || {}), ...(data.userProfile || {}) },
+              targetMacros: { ...prev.targetMacros, ...(cachedSettings.targetMacros || {}), ...(data.targetMacros || {}) },
+              notifications: mergedNotifications
+            };
+
+            // If server notifications were empty but local storage had them, push back to server to restore it!
+            if (!serverNotif.emailRecipient && cachedNotif.emailRecipient) {
+              fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newSettings)
+              }).catch(e => console.warn('Auto restore settings to server failed', e));
+            }
+
+            return newSettings;
+          });
         })
-        .catch(err => console.error(err));
+        .catch(err => {
+          console.error('Fetch settings error:', err);
+          if (cachedSettings && Object.keys(cachedSettings).length > 0) {
+            setSettings(prev => ({
+              ...prev,
+              ...cachedSettings,
+              geminiApiKey: cachedKey || cachedSettings.geminiApiKey || prev.geminiApiKey,
+              notifications: { ...prev.notifications, ...(cachedSettings.notifications || {}) }
+            }));
+          }
+        });
     }
   }, [isOpen]);
 
@@ -96,15 +147,34 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
     setLoading(true);
     setStatusMsg('');
     try {
-      const res = await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings)
-      });
-      if (!res.ok) throw new Error('儲存失敗');
+      let cachedSettings = {};
+      try {
+        cachedSettings = JSON.parse(localStorage.getItem('nt_settings') || '{}');
+      } catch (e) {}
+      
+      const toSave = {
+        ...settings,
+        notifications: {
+          ...settings.notifications,
+          smtpPass: settings.notifications.smtpPass === '********'
+            ? (cachedSettings.notifications?.smtpPass || '')
+            : settings.notifications.smtpPass
+        }
+      };
+
+      // Save to localStorage immediately
+      localStorage.setItem('nt_settings', JSON.stringify(toSave));
       if (settings.geminiApiKey) {
         localStorage.setItem('gemini_api_key', settings.geminiApiKey);
       }
+
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(toSave)
+      });
+      if (!res.ok) throw new Error('儲存失敗');
+
       const saved = await res.json();
       setStatusMsg('✅ 設定已成功儲存！');
       if (onSettingsUpdated) onSettingsUpdated(saved);

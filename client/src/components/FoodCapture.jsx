@@ -289,53 +289,16 @@ export default function FoodCapture({
 
   return (
     <div className="space-y-5 pb-20">
-      {/* 📅 Date Selector Banner */}
-      <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-200 flex items-center justify-between gap-2">
-        <button
-          onClick={handlePrevDay}
-          className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition active:scale-95"
-          title="前一天"
-        >
-          <ChevronLeft size={20} />
-        </button>
-
-        <div className="flex items-center gap-2">
-          <Calendar size={18} className="text-emerald-600 shrink-0" />
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="text-sm font-bold text-slate-800 bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
-          />
-          {selectedDate === todayStr ? (
-            <span className="text-[11px] font-semibold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md">
-              今天
-            </span>
-          ) : (
-            <button
-              onClick={handleToday}
-              className="text-[11px] font-medium text-emerald-600 hover:underline flex items-center gap-0.5"
-            >
-              <RotateCcw size={12} />
-              回今天
-            </button>
-          )}
-        </div>
-
-        <button
-          onClick={handleNextDay}
-          className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition active:scale-95"
-          title="後一天"
-        >
-          <ChevronRight size={20} />
-        </button>
-      </div>
-
       {/* Upload & Input Card */}
       <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200">
         <h2 className="text-base font-bold text-slate-800 flex items-center gap-2 mb-3">
           <Camera className="text-emerald-500" size={20} />
-          拍照辨識 / 記錄至 {selectedDate === todayStr ? '今日' : selectedDate}
+          <span>拍照辨識 / 記錄飲食</span>
+          {selectedDate !== todayStr && (
+            <span className="text-xs font-normal text-amber-700 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
+              記錄至 {selectedDate}
+            </span>
+          )}
         </h2>
 
         {/* Hidden File Inputs */}
@@ -441,19 +404,6 @@ export default function FoodCapture({
             placeholder="例：孔雀捲心餅63g、熟香蕉150g、牛肉麵半碗"
             className="w-full text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50/50"
           />
-          {/* Quick presets */}
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            {['茶葉蛋 1顆', '地瓜 150g', '舒肥雞胸肉 150g', '孔雀捲心餅 63g'].map(preset => (
-              <button
-                key={preset}
-                type="button"
-                onClick={() => setTextInput(preset)}
-                className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition"
-              >
-                + {preset}
-              </button>
-            ))}
-          </div>
         </div>
 
         {/* Analyze Button */}
@@ -687,6 +637,48 @@ export default function FoodCapture({
           </div>
         </div>
       )}
+
+      {/* 📅 Date Selector Banner (下移至飲食明細上方) */}
+      <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-200 flex items-center justify-between gap-2">
+        <button
+          onClick={handlePrevDay}
+          className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition active:scale-95"
+          title="前一天"
+        >
+          <ChevronLeft size={20} />
+        </button>
+
+        <div className="flex items-center gap-2">
+          <Calendar size={18} className="text-emerald-600 shrink-0" />
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="text-sm font-bold text-slate-800 bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+          />
+          {selectedDate === todayStr ? (
+            <span className="text-[11px] font-semibold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md">
+              今天
+            </span>
+          ) : (
+            <button
+              onClick={handleToday}
+              className="text-[11px] font-medium text-emerald-600 hover:underline flex items-center gap-0.5"
+            >
+              <RotateCcw size={12} />
+              回今天
+            </button>
+          )}
+        </div>
+
+        <button
+          onClick={handleNextDay}
+          className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition active:scale-95"
+          title="後一天"
+        >
+          <ChevronRight size={20} />
+        </button>
+      </div>
 
       {/* Selected Date Meals List */}
       <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200">
