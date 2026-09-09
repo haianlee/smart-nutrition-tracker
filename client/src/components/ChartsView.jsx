@@ -49,18 +49,67 @@ export default function ChartsView({ tdee = 2200, targetCalories = 1900 }) {
   const minW = validWeights.length > 0 ? Math.floor(Math.min(...validWeights) - 1) : 60;
   const maxW = validWeights.length > 0 ? Math.ceil(Math.max(...validWeights) + 1) : 80;
 
-  // Aggregate macros for the selected period
-  const totalProtein = trendData.reduce((acc, d) => acc + (d.protein || 0), 0);
-  const totalCarbs = trendData.reduce((acc, d) => acc + (d.carbs || 0), 0);
-  const totalFat = trendData.reduce((acc, d) => acc + (d.fat || 0), 0);
+  const [macroMode, setMacroMode] = useState('week'); // 'day', 'week', 'range'
+
+  // Determine slice and label based on macroMode (單日 vs 週累積 vs 週期累積)
+  let targetMacroSlice = [];
+  let macroRangeLabel = '';
+  let macroDaysCount = 1;
+
+  if (macroMode === 'day') {
+    const todayEntry = trendData.length > 0 ? trendData[trendData.length - 1] : null;
+    targetMacroSlice = todayEntry ? [todayEntry] : [];
+    macroRangeLabel = todayEntry?.date ? `${todayEntry.date} (單日)` : '今日單日';
+    macroDaysCount = 1;
+  } else if (macroMode === 'week') {
+    targetMacroSlice = trendData.slice(-7);
+    const startD = targetMacroSlice[0]?.date || '';
+    const endD = targetMacroSlice[targetMacroSlice.length - 1]?.date || '';
+    macroRangeLabel = startD && endD ? `${startD} ~ ${endD}` : '近 7 天';
+    macroDaysCount = Math.max(1, targetMacroSlice.length);
+  } else {
+    targetMacroSlice = trendData;
+    const startD = targetMacroSlice[0]?.date || '';
+    const endD = targetMacroSlice[targetMacroSlice.length - 1]?.date || '';
+    macroRangeLabel = startD && endD ? `${startD} ~ ${endD}` : `近 ${days} 天`;
+    macroDaysCount = Math.max(1, targetMacroSlice.length);
+  }
+
+  const macroProteinG = targetMacroSlice.reduce((acc, d) => acc + (d.protein || 0), 0);
+  const macroCarbsG = targetMacroSlice.reduce((acc, d) => acc + (d.carbs || 0), 0);
+  const macroFatG = targetMacroSlice.reduce((acc, d) => acc + (d.fat || 0), 0);
+
+  const totalMacroGrams = macroProteinG + macroCarbsG + macroFatG || 1;
+
+  // Calories: Protein 4 kcal/g, Carbs 4 kcal/g, Fat 9 kcal/g
+  const proteinKcal = macroProteinG * 4;
+  const carbsKcal = macroCarbsG * 4;
+  const fatKcal = macroFatG * 9;
+  const totalMacroKcal = proteinKcal + carbsKcal + fatKcal || 1;
 
   const macroPieData = [
-    { name: '蛋白質', value: totalProtein, color: '#ef4444' },
-    { name: '碳水化合物', value: totalCarbs, color: '#f59e0b' },
-    { name: '脂肪', value: totalFat, color: '#06b6d4' }
+    {
+      name: '蛋白質',
+      value: macroProteinG,
+      kcal: proteinKcal,
+      avg: Math.round(macroProteinG / macroDaysCount),
+      color: '#ef4444'
+    },
+    {
+      name: '碳水化合物',
+      value: macroCarbsG,
+      kcal: carbsKcal,
+      avg: Math.round(macroCarbsG / macroDaysCount),
+      color: '#f59e0b'
+    },
+    {
+      name: '脂肪',
+      value: macroFatG,
+      kcal: fatKcal,
+      avg: Math.round(macroFatG / macroDaysCount),
+      color: '#06b6d4'
+    }
   ];
-
-  const totalMacroGrams = totalProtein + totalCarbs + totalFat || 1;
 
   return (
     <div className="space-y-6 pb-20">
@@ -254,19 +303,67 @@ export default function ChartsView({ tdee = 2200, targetCalories = 1900 }) {
 
       {/* 3. Macronutrient Distribution */}
       <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200">
-        <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5 mb-3">
-          <PieIcon className="text-teal-500" size={17} />
-          週期巨量營養素比例 (三大營養總量)
-        </h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                <PieIcon className="text-teal-500" size={17} />
+                巨量營養素比例
+              </h3>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+                {macroMode === 'day' ? '📅 今日單日' : macroMode === 'week' ? '📊 近 7 天 (週累積)' : `📈 近 ${days} 天 (全期累積)`}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              統計區間：{macroRangeLabel}（共 {macroDaysCount} 天數據）
+            </p>
+          </div>
 
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="w-48 h-48">
+          {/* 切換按鈕：單日 / 週累積 / 週期全累積 */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl self-start sm:self-auto">
+            <button
+              onClick={() => setMacroMode('day')}
+              className={`px-3 py-1 text-xs font-medium rounded-lg transition-all ${
+                macroMode === 'day'
+                  ? 'bg-white text-teal-700 shadow-sm font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              今日單日
+            </button>
+            <button
+              onClick={() => setMacroMode('week')}
+              className={`px-3 py-1 text-xs font-medium rounded-lg transition-all ${
+                macroMode === 'week'
+                  ? 'bg-white text-teal-700 shadow-sm font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              近 7 天 (週累積)
+            </button>
+            {days !== 7 && (
+              <button
+                onClick={() => setMacroMode('range')}
+                className={`px-3 py-1 text-xs font-medium rounded-lg transition-all ${
+                  macroMode === 'range'
+                    ? 'bg-white text-teal-700 shadow-sm font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                近 {days} 天全累積
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-6 pt-2">
+          <div className="relative w-48 h-48 flex items-center justify-center flex-shrink-0">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={macroPieData}
-                  innerRadius={45}
-                  outerRadius={75}
+                  innerRadius={48}
+                  outerRadius={76}
                   paddingAngle={4}
                   dataKey="value"
                 >
@@ -275,8 +372,8 @@ export default function ChartsView({ tdee = 2200, targetCalories = 1900 }) {
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(val, name) => [
-                    `${val}g (${Math.round((val / totalMacroGrams) * 100)}%)`,
+                  formatter={(val, name, item) => [
+                    `${val}g (${Math.round((val / totalMacroGrams) * 100)}% 克數比 / ${Math.round((item.payload.kcal / totalMacroKcal) * 100)}% 熱量比)`,
                     name
                   ]}
                   contentStyle={{
@@ -288,24 +385,46 @@ export default function ChartsView({ tdee = 2200, targetCalories = 1900 }) {
                 />
               </PieChart>
             </ResponsiveContainer>
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
+              <span className="text-[11px] text-slate-400 font-medium">
+                {macroMode === 'day' ? '單日總量' : `${macroDaysCount}天累積`}
+              </span>
+              <span className="text-base font-black text-slate-800">
+                {Math.round(totalMacroGrams)}g
+              </span>
+              <span className="text-[10px] text-slate-400">
+                {Math.round(totalMacroKcal)} kcal
+              </span>
+            </div>
           </div>
 
-          <div className="flex-1 w-full space-y-3">
+          <div className="flex-1 w-full space-y-3.5">
             {macroPieData.map(macro => {
-              const pct = Math.round((macro.value / totalMacroGrams) * 100);
+              const gramPct = Math.round((macro.value / totalMacroGrams) * 100);
+              const kcalPct = Math.round((macro.kcal / totalMacroKcal) * 100);
               return (
-                <div key={macro.name} className="space-y-1">
-                  <div className="flex justify-between text-xs">
+                <div key={macro.name} className="space-y-1.5 bg-slate-50/70 p-2.5 rounded-2xl border border-slate-100">
+                  <div className="flex justify-between items-center text-xs">
                     <span className="font-semibold text-slate-700 flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: macro.color }} />
                       {macro.name}
+                      {macroDaysCount > 1 && (
+                        <span className="text-[10px] font-medium text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                          均 {macro.avg}g/天
+                        </span>
+                      )}
                     </span>
-                    <span className="font-bold text-slate-900">{macro.value}g ({pct}%)</span>
+                    <div className="text-right">
+                      <span className="font-bold text-slate-900">{macro.value}g</span>
+                      <span className="text-slate-500 text-[11px] ml-1.5">
+                        (佔比 {gramPct}% | 熱量 {kcalPct}%)
+                      </span>
+                    </div>
                   </div>
-                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                  <div className="w-full bg-slate-200/70 h-2 rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-500"
-                      style={{ width: `${pct}%`, backgroundColor: macro.color }}
+                      style={{ width: `${gramPct}%`, backgroundColor: macro.color }}
                     />
                   </div>
                 </div>
