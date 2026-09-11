@@ -18,7 +18,7 @@ import {
 import { TrendingUp, Flame, PieChart as PieIcon, Info, RefreshCw } from 'lucide-react';
 
 export default function ChartsView({ tdee = 2200, targetCalories = 1900 }) {
-  const [days, setDays] = useState(14);
+  const [days, setDays] = useState(30);
   const [trendData, setTrendData] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -124,17 +124,18 @@ export default function ChartsView({ tdee = 2200, targetCalories = 1900 }) {
             <p className="text-xs text-slate-500 mt-0.5">體重波動平滑曲線與熱量赤字/盈餘關聯</p>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-2xl self-start sm:self-auto">
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl self-start sm:self-auto overflow-x-auto max-w-full">
             {[
               { label: '7 天', val: 7 },
-              { label: '14 天', val: 14 },
               { label: '30 天', val: 30 },
-              { label: '90 天', val: 90 }
+              { label: '90 天', val: 90 },
+              { label: '180 天', val: 180 },
+              { label: '360 天', val: 360 }
             ].map(item => (
               <button
                 key={item.val}
                 onClick={() => setDays(item.val)}
-                className={`text-xs px-3 py-1.5 rounded-xl font-medium transition ${
+                className={`text-xs px-2.5 py-1.5 rounded-xl font-medium transition shrink-0 ${
                   days === item.val
                     ? 'bg-white text-emerald-600 shadow-sm font-bold'
                     : 'text-slate-500 hover:text-slate-800'
@@ -180,6 +181,7 @@ export default function ChartsView({ tdee = 2200, targetCalories = 1900 }) {
                   tickFormatter={d => d.slice(5)}
                   tick={{ fontSize: 11, fill: '#94a3b8' }}
                   stroke="#cbd5e1"
+                  minTickGap={20}
                 />
                 <YAxis
                   domain={[minW, maxW]}
@@ -209,7 +211,7 @@ export default function ChartsView({ tdee = 2200, targetCalories = 1900 }) {
                   dataKey="weight"
                   stroke="#3b82f6"
                   strokeWidth={2}
-                  dot={{ r: 3, fill: '#3b82f6' }}
+                  dot={days > 30 ? false : { r: 3, fill: '#3b82f6' }}
                   activeDot={{ r: 5 }}
                   connectNulls={true}
                 />
@@ -252,6 +254,7 @@ export default function ChartsView({ tdee = 2200, targetCalories = 1900 }) {
                   tickFormatter={d => d.slice(5)}
                   tick={{ fontSize: 11, fill: '#94a3b8' }}
                   stroke="#cbd5e1"
+                  minTickGap={20}
                 />
                 <YAxis
                   tick={{ fontSize: 11, fill: '#94a3b8' }}

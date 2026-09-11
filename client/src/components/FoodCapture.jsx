@@ -124,6 +124,14 @@ export default function FoodCapture({
       });
 
       // Prepare edit form (defaults date to currently selectedDate)
+      const baseW = Number(ana.estimated_weight_g) || 100;
+      const baseCal = Number(ana.calories) || 0;
+      const baseP = Number(ana.macros?.protein_g) || 0;
+      const baseC = Number(ana.macros?.carbs_g) || 0;
+      const baseF = Number(ana.macros?.fat_g) || 0;
+      const baseFib = Number(ana.macros?.fiber_g) || 0;
+      const baseIngs = (ana.ingredients || []).map(ing => ({ ...ing }));
+
       setEditForm({
         date: selectedDate,
         time: nowTime,
@@ -131,12 +139,19 @@ export default function FoodCapture({
         foodName: ana.food_name,
         estimatedWeightG: ana.estimated_weight_g,
         calories: ana.calories,
-        proteinG: ana.macros.protein_g,
-        carbsG: ana.macros.carbs_g,
-        fatG: ana.macros.fat_g,
-        fiberG: ana.macros.fiber_g,
+        proteinG: baseP,
+        carbsG: baseC,
+        fatG: baseF,
+        fiberG: baseFib,
         confidenceNote: ana.confidence_note,
-        ingredients: ana.ingredients || []
+        ingredients: ana.ingredients || [],
+        baseWeightG: baseW,
+        baseCalories: baseCal,
+        baseProteinG: baseP,
+        baseCarbsG: baseC,
+        baseFatG: baseF,
+        baseFiberG: baseFib,
+        baseIngredients: baseIngs
       });
     } catch (err) {
       console.error(err);
@@ -193,23 +208,48 @@ export default function FoodCapture({
   // Proportionally rescale calories & macros when user changes weight in new meal form
   const handleWeightChange = (newWeight) => {
     const w = Number(newWeight);
-    if (!w || !editForm.estimatedWeightG) {
-      setEditForm({ ...editForm, estimatedWeightG: newWeight });
+    const baseW = Number(editForm.baseWeightG) || Number(editForm.estimatedWeightG) || 100;
+    const baseCal = Number(editForm.baseCalories ?? editForm.calories) || 0;
+    const baseP = Number(editForm.baseProteinG ?? editForm.proteinG) || 0;
+    const baseC = Number(editForm.baseCarbsG ?? editForm.carbsG) || 0;
+    const baseF = Number(editForm.baseFatG ?? editForm.fatG) || 0;
+    const baseFib = Number(editForm.baseFiberG ?? editForm.fiberG) || 0;
+    const baseIngs = editForm.baseIngredients || [];
+
+    if (!w || w <= 0 || baseW <= 0) {
+      setEditForm(prev => ({
+        ...prev,
+        estimatedWeightG: newWeight
+      }));
       return;
     }
-    const ratio = w / Number(editForm.estimatedWeightG);
-    setEditForm({
-      ...editForm,
+
+    const ratio = w / baseW;
+    setEditForm(prev => ({
+      ...prev,
       estimatedWeightG: newWeight,
-      calories: Math.round(Number(editForm.calories) * ratio),
-      proteinG: Math.round(Number(editForm.proteinG) * ratio * 10) / 10,
-      carbsG: Math.round(Number(editForm.carbsG) * ratio * 10) / 10,
-      fatG: Math.round(Number(editForm.fatG) * ratio * 10) / 10
-    });
+      calories: Math.round(baseCal * ratio),
+      proteinG: Math.round(baseP * ratio * 10) / 10,
+      carbsG: Math.round(baseC * ratio * 10) / 10,
+      fatG: Math.round(baseF * ratio * 10) / 10,
+      fiberG: Math.round(baseFib * ratio * 10) / 10,
+      ingredients: baseIngs.map(ing => ({
+        ...ing,
+        weight_g: Math.round((Number(ing.weight_g) || 0) * ratio),
+        calories: Math.round((Number(ing.calories) || 0) * ratio)
+      }))
+    }));
   };
 
   // Open existing meal for editing
   const handleStartEditMeal = (meal) => {
+    const w = Number(meal.estimatedWeightG) || 100;
+    const cal = Number(meal.calories) || 0;
+    const p = Number(meal.macros?.proteinG) || 0;
+    const c = Number(meal.macros?.carbsG) || 0;
+    const f = Number(meal.macros?.fatG) || 0;
+    const fib = Number(meal.macros?.fiberG) || 0;
+
     setEditingMeal({
       id: meal.id,
       date: meal.date,
@@ -218,30 +258,44 @@ export default function FoodCapture({
       foodName: meal.foodName,
       estimatedWeightG: meal.estimatedWeightG,
       calories: meal.calories,
-      proteinG: meal.macros?.proteinG ?? 0,
-      carbsG: meal.macros?.carbsG ?? 0,
-      fatG: meal.macros?.fatG ?? 0,
-      fiberG: meal.macros?.fiberG ?? 0,
-      confidenceNote: meal.confidenceNote || ''
+      proteinG: p,
+      carbsG: c,
+      fatG: f,
+      fiberG: fib,
+      confidenceNote: meal.confidenceNote || '',
+      baseWeightG: w,
+      baseCalories: cal,
+      baseProteinG: p,
+      baseCarbsG: c,
+      baseFatG: f,
+      baseFiberG: fib
     });
   };
 
   // Rescale when editing existing meal
   const handleEditingWeightChange = (newWeight) => {
     const w = Number(newWeight);
-    if (!w || !editingMeal.estimatedWeightG) {
-      setEditingMeal({ ...editingMeal, estimatedWeightG: newWeight });
+    const baseW = Number(editingMeal.baseWeightG) || Number(editingMeal.estimatedWeightG) || 100;
+    const baseCal = Number(editingMeal.baseCalories ?? editingMeal.calories) || 0;
+    const baseP = Number(editingMeal.baseProteinG ?? editingMeal.proteinG) || 0;
+    const baseC = Number(editingMeal.baseCarbsG ?? editingMeal.carbsG) || 0;
+    const baseF = Number(editingMeal.baseFatG ?? editingMeal.fatG) || 0;
+    const baseFib = Number(editingMeal.baseFiberG ?? editingMeal.fiberG) || 0;
+
+    if (!w || w <= 0 || baseW <= 0) {
+      setEditingMeal(prev => ({ ...prev, estimatedWeightG: newWeight }));
       return;
     }
-    const ratio = w / Number(editingMeal.estimatedWeightG);
-    setEditingMeal({
-      ...editingMeal,
+    const ratio = w / baseW;
+    setEditingMeal(prev => ({
+      ...prev,
       estimatedWeightG: newWeight,
-      calories: Math.round(Number(editingMeal.calories) * ratio),
-      proteinG: Math.round(Number(editingMeal.proteinG) * ratio * 10) / 10,
-      carbsG: Math.round(Number(editingMeal.carbsG) * ratio * 10) / 10,
-      fatG: Math.round(Number(editingMeal.fatG) * ratio * 10) / 10
-    });
+      calories: Math.round(baseCal * ratio),
+      proteinG: Math.round(baseP * ratio * 10) / 10,
+      carbsG: Math.round(baseC * ratio * 10) / 10,
+      fatG: Math.round(baseF * ratio * 10) / 10,
+      fiberG: Math.round(baseFib * ratio * 10) / 10
+    }));
   };
 
   // Save updated meal
@@ -520,7 +574,16 @@ export default function FoodCapture({
                   <input
                     type="number"
                     value={editForm.calories}
-                    onChange={(e) => setEditForm({ ...editForm, calories: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const num = Number(val);
+                      setEditForm(prev => ({
+                        ...prev,
+                        calories: val,
+                        baseCalories: !isNaN(num) && num > 0 ? num : prev.baseCalories,
+                        baseWeightG: Number(prev.estimatedWeightG) > 0 ? Number(prev.estimatedWeightG) : prev.baseWeightG
+                      }));
+                    }}
                     className="w-16 text-center font-black text-xl text-amber-600 bg-transparent border-b border-amber-300 focus:outline-none"
                   />
                 ) : (
@@ -537,8 +600,18 @@ export default function FoodCapture({
                 {editMode ? (
                   <input
                     type="number"
+                    step="0.1"
                     value={editForm.proteinG}
-                    onChange={(e) => setEditForm({ ...editForm, proteinG: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const num = Number(val);
+                      setEditForm(prev => ({
+                        ...prev,
+                        proteinG: val,
+                        baseProteinG: !isNaN(num) && num >= 0 ? num : prev.baseProteinG,
+                        baseWeightG: Number(prev.estimatedWeightG) > 0 ? Number(prev.estimatedWeightG) : prev.baseWeightG
+                      }));
+                    }}
                     className="w-12 text-center text-sm font-bold text-rose-700 bg-transparent border-b border-rose-300 focus:outline-none"
                   />
                 ) : (
@@ -552,8 +625,18 @@ export default function FoodCapture({
                 {editMode ? (
                   <input
                     type="number"
+                    step="0.1"
                     value={editForm.carbsG}
-                    onChange={(e) => setEditForm({ ...editForm, carbsG: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const num = Number(val);
+                      setEditForm(prev => ({
+                        ...prev,
+                        carbsG: val,
+                        baseCarbsG: !isNaN(num) && num >= 0 ? num : prev.baseCarbsG,
+                        baseWeightG: Number(prev.estimatedWeightG) > 0 ? Number(prev.estimatedWeightG) : prev.baseWeightG
+                      }));
+                    }}
                     className="w-12 text-center text-sm font-bold text-amber-700 bg-transparent border-b border-amber-300 focus:outline-none"
                   />
                 ) : (
@@ -567,8 +650,18 @@ export default function FoodCapture({
                 {editMode ? (
                   <input
                     type="number"
+                    step="0.1"
                     value={editForm.fatG}
-                    onChange={(e) => setEditForm({ ...editForm, fatG: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const num = Number(val);
+                      setEditForm(prev => ({
+                        ...prev,
+                        fatG: val,
+                        baseFatG: !isNaN(num) && num >= 0 ? num : prev.baseFatG,
+                        baseWeightG: Number(prev.estimatedWeightG) > 0 ? Number(prev.estimatedWeightG) : prev.baseWeightG
+                      }));
+                    }}
                     className="w-12 text-center text-sm font-bold text-cyan-700 bg-transparent border-b border-cyan-300 focus:outline-none"
                   />
                 ) : (
@@ -582,8 +675,18 @@ export default function FoodCapture({
                 {editMode ? (
                   <input
                     type="number"
+                    step="0.1"
                     value={editForm.fiberG}
-                    onChange={(e) => setEditForm({ ...editForm, fiberG: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const num = Number(val);
+                      setEditForm(prev => ({
+                        ...prev,
+                        fiberG: val,
+                        baseFiberG: !isNaN(num) && num >= 0 ? num : prev.baseFiberG,
+                        baseWeightG: Number(prev.estimatedWeightG) > 0 ? Number(prev.estimatedWeightG) : prev.baseWeightG
+                      }));
+                    }}
                     className="w-12 text-center text-sm font-bold text-emerald-700 bg-transparent border-b border-emerald-300 focus:outline-none"
                   />
                 ) : (
@@ -852,7 +955,16 @@ export default function FoodCapture({
                   <input
                     type="number"
                     value={editingMeal.calories}
-                    onChange={(e) => setEditingMeal({ ...editingMeal, calories: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const num = Number(val);
+                      setEditingMeal(prev => ({
+                        ...prev,
+                        calories: val,
+                        baseCalories: !isNaN(num) && num > 0 ? num : prev.baseCalories,
+                        baseWeightG: Number(prev.estimatedWeightG) > 0 ? Number(prev.estimatedWeightG) : prev.baseWeightG
+                      }));
+                    }}
                     className="w-full text-sm font-black px-3 py-2 rounded-xl border border-amber-200 bg-amber-50/50 focus:outline-none focus:border-amber-500 text-amber-600"
                   />
                 </div>
@@ -868,7 +980,16 @@ export default function FoodCapture({
                       type="number"
                       step="0.1"
                       value={editingMeal.proteinG}
-                      onChange={(e) => setEditingMeal({ ...editingMeal, proteinG: e.target.value })}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const num = Number(val);
+                        setEditingMeal(prev => ({
+                          ...prev,
+                          proteinG: val,
+                          baseProteinG: !isNaN(num) && num >= 0 ? num : prev.baseProteinG,
+                          baseWeightG: Number(prev.estimatedWeightG) > 0 ? Number(prev.estimatedWeightG) : prev.baseWeightG
+                        }));
+                      }}
                       className="w-full text-center text-xs font-bold text-rose-700 bg-transparent border-b border-rose-200 focus:outline-none"
                     />
                   </div>
@@ -878,7 +999,16 @@ export default function FoodCapture({
                       type="number"
                       step="0.1"
                       value={editingMeal.carbsG}
-                      onChange={(e) => setEditingMeal({ ...editingMeal, carbsG: e.target.value })}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const num = Number(val);
+                        setEditingMeal(prev => ({
+                          ...prev,
+                          carbsG: val,
+                          baseCarbsG: !isNaN(num) && num >= 0 ? num : prev.baseCarbsG,
+                          baseWeightG: Number(prev.estimatedWeightG) > 0 ? Number(prev.estimatedWeightG) : prev.baseWeightG
+                        }));
+                      }}
                       className="w-full text-center text-xs font-bold text-amber-700 bg-transparent border-b border-amber-200 focus:outline-none"
                     />
                   </div>
@@ -888,7 +1018,16 @@ export default function FoodCapture({
                       type="number"
                       step="0.1"
                       value={editingMeal.fatG}
-                      onChange={(e) => setEditingMeal({ ...editingMeal, fatG: e.target.value })}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const num = Number(val);
+                        setEditingMeal(prev => ({
+                          ...prev,
+                          fatG: val,
+                          baseFatG: !isNaN(num) && num >= 0 ? num : prev.baseFatG,
+                          baseWeightG: Number(prev.estimatedWeightG) > 0 ? Number(prev.estimatedWeightG) : prev.baseWeightG
+                        }));
+                      }}
                       className="w-full text-center text-xs font-bold text-cyan-700 bg-transparent border-b border-cyan-200 focus:outline-none"
                     />
                   </div>
@@ -898,7 +1037,16 @@ export default function FoodCapture({
                       type="number"
                       step="0.1"
                       value={editingMeal.fiberG}
-                      onChange={(e) => setEditingMeal({ ...editingMeal, fiberG: e.target.value })}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const num = Number(val);
+                        setEditingMeal(prev => ({
+                          ...prev,
+                          fiberG: val,
+                          baseFiberG: !isNaN(num) && num >= 0 ? num : prev.baseFiberG,
+                          baseWeightG: Number(prev.estimatedWeightG) > 0 ? Number(prev.estimatedWeightG) : prev.baseWeightG
+                        }));
+                      }}
                       className="w-full text-center text-xs font-bold text-emerald-700 bg-transparent border-b border-emerald-200 focus:outline-none"
                     />
                   </div>
