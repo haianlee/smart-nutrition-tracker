@@ -62,12 +62,20 @@ const defaultData = {
     },
     notifications: {
       emailRecipient: '',
+      // Option B: Google Apps Script Webhook (Zero-domain Gmail Relay)
+      gasWebhookUrl: '',
+      // Option C: Telegram Bot & LINE
+      telegramBotToken: '',
+      telegramChatId: '',
+      lineToken: '',
+      // Legacy / Custom SMTP
       smtpHost: 'smtp.gmail.com',
       smtpPort: 587,
       smtpSecure: false,
       smtpUser: '',
       smtpPass: '',
       smtpFrom: 'Nutrition Tracker <no-reply@tracker.local>',
+      resendApiKey: '',
       dailyDigestEnabled: true,
       dailyDigestTime: '22:00',
       weeklyDigestDay: 0 // Sunday

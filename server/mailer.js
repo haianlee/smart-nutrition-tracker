@@ -182,21 +182,157 @@ export function buildDailyReportHtml(summary, settings, advice = null) {
   `;
 }
 
+export function buildDailyReportText(summary, settings, advice = null) {
+  const isDeficit = summary.deficit >= 0;
+  const deficitText = isDeficit ? `赤字 -${Math.abs(summary.deficit)} kcal (良好燃脂)` : `盈餘 +${Math.abs(summary.deficit)} kcal`;
+  
+  let text = `🥗【每日健康飲食結報 - ${summary.date}】\n\n`;
+  text += `📊 數據摘要：\n`;
+  text += `• 今日攝取：${summary.totalCalories} kcal (目標: ${summary.targetCalories} kcal)\n`;
+  text += `• TDEE 盈虧：${deficitText}\n`;
+  if (summary.weight !== null && summary.weight !== undefined) {
+    text += `• 今日體重：${summary.weight} kg ${summary.bodyFat ? `(體脂 ${summary.bodyFat}%)` : ''}\n`;
+  }
+  text += `\n🥩 三大營養素：\n`;
+  text += `• 蛋白質：${summary.totalProtein}g / 目標 ${settings.targetMacros?.proteinG || 130}g\n`;
+  text += `• 碳水化合物：${summary.totalCarbs}g / 目標 ${settings.targetMacros?.carbsG || 200}g\n`;
+  text += `• 脂肪：${summary.totalFat}g / 目標 ${settings.targetMacros?.fatG || 60}g\n`;
+  text += `• 膳食纖維：${summary.totalFiber}g\n`;
+
+  if (advice) {
+    text += `\n🤖 AI 營養師總結 (${advice.score}分 - ${advice.grade})：\n`;
+    text += `${advice.summary}\n`;
+    if (advice.highlights?.length) {
+      text += `\n✅ 亮點：\n` + advice.highlights.map(h => `• ${h}`).join('\n') + `\n`;
+    }
+    if (advice.warnings?.length) {
+      text += `\n⚠️ 待注意：\n` + advice.warnings.map(w => `• ${w}`).join('\n') + `\n`;
+    }
+    if (advice.tomorrowPlan) {
+      text += `\n📅 明日建議規劃：\n`;
+      if (advice.tomorrowPlan.calorieTargetNote) text += `🎯 ${advice.tomorrowPlan.calorieTargetNote}\n`;
+      if (advice.tomorrowPlan.macroFocus) text += `🥗 ${advice.tomorrowPlan.macroFocus}\n`;
+      if (advice.tomorrowPlan.suggestedMeals?.length) {
+        text += advice.tomorrowPlan.suggestedMeals.map(m => `• [${m.mealType}] ${m.tip}`).join('\n') + `\n`;
+      }
+    }
+  }
+
+  if (summary.meals && summary.meals.length > 0) {
+    text += `\n📋 今日餐食 (${summary.mealCount}餐)：\n`;
+    text += summary.meals.map(m => `• [${m.time}] ${m.foodName} (${m.estimatedWeightG}g): ${m.calories}kcal`).join('\n');
+  }
+
+  return text;
+}
+
 export async function sendDailyDigest(dateStr = null) {
   const settings = db.getSettings();
   const notif = settings.notifications || {};
   const recipient = notif.emailRecipient;
 
-  if (!recipient) {
-    throw new Error('未設定接收通知的電子信箱 (請至設定中填寫 Email Recipient)');
-  }
-
   const summary = db.getDailySummary(dateStr);
   const advice = db.getDailyAdvice(summary.date);
   const html = buildDailyReportHtml(summary, settings, advice);
+  const textSummary = buildDailyReportText(summary, settings, advice);
 
-  // 1. If user provided a Resend API Key, use Resend HTTP API (Port 443, 100% immune to Render SMTP block)
-  if (notif.resendApiKey && notif.resendApiKey.trim()) {
+  const results = [];
+  const errors = [];
+
+  const subject = `【每日健康結報】${summary.date} 攝取 ${summary.totalCalories} kcal (${summary.deficit >= 0 ? '赤字 ' + summary.deficit : '盈餘 +' + Math.abs(summary.deficit)} kcal)`;
+
+  // ==========================================
+  // 1. 方案 B: Google Apps Script Webhook (免網域寄發 Gmail)
+  // ==========================================
+  if (notif.gasWebhookUrl && notif.gasWebhookUrl.trim().startsWith('http')) {
+    try {
+      const gasRes = await fetch(notif.gasWebhookUrl.trim(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipient: recipient || undefined,
+          subject,
+          htmlBody: html,
+          textBody: textSummary
+        })
+      });
+
+      const gasText = await gasRes.text();
+      let gasData = {};
+      try { gasData = JSON.parse(gasText); } catch (e) { gasData = { raw: gasText }; }
+
+      if (gasRes.ok && (gasData.status === 'success' || !gasData.status)) {
+        results.push({ provider: 'gas', message: '已透過 Google Apps Script (Gmail) 成功寄出結報！' });
+      } else {
+        throw new Error(gasData.message || gasText || 'Google Apps Script 回應異常');
+      }
+    } catch (err) {
+      console.error('GAS send error:', err);
+      errors.push(`Google Apps Script 失敗: ${err.message}`);
+    }
+  }
+
+  // ==========================================
+  // 2. 方案 C: Telegram Bot 即時推播 (手機最快收到)
+  // ==========================================
+  if (notif.telegramBotToken && notif.telegramChatId) {
+    try {
+      const tgToken = notif.telegramBotToken.trim();
+      const tgChatId = notif.telegramChatId.trim();
+      const tgRes = await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: tgChatId,
+          text: textSummary
+        })
+      });
+
+      const tgData = await tgRes.json();
+      if (tgRes.ok && tgData.ok) {
+        results.push({ provider: 'telegram', message: '已透過 Telegram Bot 成功推播至您的手機！' });
+      } else {
+        throw new Error(tgData.description || 'Telegram API 回應錯誤');
+      }
+    } catch (err) {
+      console.error('Telegram send error:', err);
+      errors.push(`Telegram 推播失敗: ${err.message}`);
+    }
+  }
+
+  // ==========================================
+  // 3. 方案 C: LINE Notify / Messaging API Webhook
+  // ==========================================
+  if (notif.lineToken && notif.lineToken.trim()) {
+    try {
+      const lineToken = notif.lineToken.trim();
+      const lineRes = await fetch('https://notify-api.line.me/api/notify', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${lineToken}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({
+          message: `\n${textSummary}`
+        })
+      });
+
+      const lineData = await lineRes.json();
+      if (lineRes.ok && lineData.status === 200) {
+        results.push({ provider: 'line', message: '已透過 LINE 成功發送推播！' });
+      } else {
+        throw new Error(lineData.message || 'LINE API 回應錯誤');
+      }
+    } catch (err) {
+      console.error('LINE send error:', err);
+      errors.push(`LINE 推播失敗: ${err.message}`);
+    }
+  }
+
+  // ==========================================
+  // 4. Resend HTTP API (若有填寫 Resend Key)
+  // ==========================================
+  if (notif.resendApiKey && notif.resendApiKey.trim() && recipient) {
     try {
       const resendRes = await fetch('https://api.resend.com/emails', {
         method: 'POST',
@@ -207,46 +343,63 @@ export async function sendDailyDigest(dateStr = null) {
         body: JSON.stringify({
           from: notif.smtpFrom || 'Smart Nutrition <onboarding@resend.dev>',
           to: recipient,
-          subject: `【每日健康結報】${summary.date} 攝取 ${summary.totalCalories} kcal (${summary.deficit >= 0 ? '赤字 ' + summary.deficit : '盈餘 +' + Math.abs(summary.deficit)} kcal)`,
+          subject,
           html
         })
       });
 
       const resendData = await resendRes.json();
-      if (!resendRes.ok) {
+      if (resendRes.ok) {
+        results.push({ provider: 'resend', message: `已透過 Resend API 發送至 ${recipient}` });
+      } else {
         throw new Error(resendData.message || 'Resend API 發送失敗');
       }
-      return { success: true, messageId: resendData.id, recipient, provider: 'resend' };
     } catch (err) {
       console.error('Resend send error:', err);
-      throw new Error(`Resend 郵件發送失敗: ${err.message}`);
+      errors.push(`Resend 失敗: ${err.message}`);
     }
   }
 
-  // 2. Otherwise use SMTP with strict timeout
-  const transporter = createTransporter(settings);
-  if (!transporter) {
-    throw new Error('尚未設定 SMTP 伺服器密碼或 Resend Key（請點擊右上角⚙️設定，或改用下方的「手機郵件 App 寄出」功能）');
+  // ==========================================
+  // 5. 傳統 SMTP (若未設定 GAS / Telegram / Resend，才退回到 SMTP)
+  // ==========================================
+  const hasModernChannel = notif.gasWebhookUrl || (notif.telegramBotToken && notif.telegramChatId) || notif.lineToken || notif.resendApiKey;
+  if (!hasModernChannel && recipient) {
+    const transporter = createTransporter(settings);
+    if (transporter) {
+      try {
+        await transporter.sendMail({
+          from: notif.smtpFrom || `"飲食與體重管理" <${notif.smtpUser}>`,
+          to: recipient,
+          subject,
+          html
+        });
+        results.push({ provider: 'smtp', message: `已透過 SMTP 伺服器發送至 ${recipient}` });
+      } catch (err) {
+        console.error('SMTP send error:', err);
+        if (err.code === 'ETIMEDOUT' || err.code === 'ESOCKET' || err.message?.includes('timeout')) {
+          errors.push('SMTP 連線超時：Render 雲端封鎖了 SMTP 埠 (587/465)。強烈建議設定「方案 B (Google Apps Script)」或「方案 C (Telegram)」！');
+        } else {
+          errors.push(`SMTP 失敗: ${err.message}`);
+        }
+      }
+    } else {
+      errors.push('尚未配置有效的通知發送管道（請至設定中配置 Google Apps Script 或 Telegram Bot）。');
+    }
   }
 
-  const mailOptions = {
-    from: notif.smtpFrom || `"飲食與體重管理" <${notif.smtpUser}>`,
-    to: recipient,
-    subject: `【每日健康結報】${summary.date} 攝取 ${summary.totalCalories} kcal (${summary.deficit >= 0 ? '赤字 ' + summary.deficit : '盈餘 +' + Math.abs(summary.deficit)} kcal)`,
-    html
-  };
-
-  try {
-    const info = await transporter.sendMail(mailOptions);
-    return { success: true, messageId: info.messageId, recipient, provider: 'smtp' };
-  } catch (err) {
-    console.error('SMTP send error:', err);
-    if (err.code === 'ETIMEDOUT' || err.code === 'ESOCKET' || err.message?.includes('timeout')) {
-      throw new Error('SMTP 連線超時：Render 免費版雲端防火牆阻擋了外發 SMTP 埠 (587/465)。建議改用「📲 手機郵件 App 寄送」或在設定中填寫免費 Resend API Key！');
-    }
-    if (err.code === 'EAUTH' || err.message?.includes('Invalid login') || err.message?.includes('Username and Password not accepted')) {
-      throw new Error('Gmail 驗證失敗：請填寫 Google 帳號安全性產生的 16 碼「應用程式專用密碼」，而非一般 Google 登入密碼！');
-    }
-    throw new Error(`SMTP 發送失敗: ${err.message}`);
+  // 總結發送結果
+  if (results.length > 0) {
+    return {
+      success: true,
+      providers: results.map(r => r.provider),
+      summary: results.map(r => r.message).join(' | '),
+      warnings: errors.length > 0 ? errors : undefined,
+      recipient: recipient || '已推播至通訊軟體'
+    };
+  } else {
+    const errMsg = errors.join('；') || '未設定任何發送管道，請至設定頁面設定 Google Apps Script Webhook 或 Telegram Bot。';
+    throw new Error(errMsg);
   }
 }
+

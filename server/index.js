@@ -235,7 +235,9 @@ app.get('/api/settings', (req, res) => {
       ...settings,
       notifications: {
         ...settings.notifications,
-        smtpPass: settings.notifications?.smtpPass ? '********' : ''
+        smtpPass: settings.notifications?.smtpPass ? '********' : '',
+        telegramBotToken: settings.notifications?.telegramBotToken ? (settings.notifications.telegramBotToken.slice(0, 4) + '...' + settings.notifications.telegramBotToken.slice(-4)) : '',
+        resendApiKey: settings.notifications?.resendApiKey ? 're_********' : ''
       }
     };
     res.json(safeSettings);
@@ -247,9 +249,15 @@ app.get('/api/settings', (req, res) => {
 app.post('/api/settings', (req, res) => {
   try {
     const payload = req.body;
-    // Don't overwrite password if masked
+    // Don't overwrite sensitive fields if masked
     if (payload.notifications?.smtpPass === '********') {
       delete payload.notifications.smtpPass;
+    }
+    if (payload.notifications?.telegramBotToken?.includes('...')) {
+      delete payload.notifications.telegramBotToken;
+    }
+    if (payload.notifications?.resendApiKey === 're_********') {
+      delete payload.notifications.resendApiKey;
     }
     const updated = db.updateSettings(payload);
     res.json(updated);
@@ -258,7 +266,7 @@ app.post('/api/settings', (req, res) => {
   }
 });
 
-// 6. Manual trigger email report
+// 6. Manual trigger report (Email / Telegram / LINE / GAS)
 app.post('/api/send-report', async (req, res) => {
   try {
     const { date } = req.body;
@@ -266,7 +274,7 @@ app.post('/api/send-report', async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('Error sending report:', err);
-    res.status(500).json({ error: err.message || '郵件發送失敗' });
+    res.status(500).json({ error: err.message || '結報發送失敗' });
   }
 });
 

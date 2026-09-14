@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { X, Key, User, Bell, Check, Calculator, Sparkles, Shield } from 'lucide-react';
+import { X, Key, User, Bell, Check, Calculator, Sparkles, Shield, Send, Copy, MessageSquare, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 
 export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
   const [activeTab, setActiveTab] = useState('profile');
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
+  const [copiedGasScript, setCopiedGasScript] = useState(false);
+  const [showSmtpAdvanced, setShowSmtpAdvanced] = useState(false);
+  const [showGasTutorial, setShowGasTutorial] = useState(false);
+  const [showTgTutorial, setShowTgTutorial] = useState(false);
 
   const [settings, setSettings] = useState(() => {
     try {
@@ -30,11 +34,16 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
         },
         notifications: {
           emailRecipient: '',
+          gasWebhookUrl: '',
+          telegramBotToken: '',
+          telegramChatId: '',
+          lineToken: '',
           smtpHost: 'smtp.gmail.com',
           smtpPort: 587,
           smtpSecure: false,
           smtpUser: '',
           smtpPass: '',
+          resendApiKey: '',
           dailyDigestEnabled: true,
           dailyDigestTime: '22:00',
           ...(cached.notifications || {})
@@ -212,7 +221,13 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
           ...settings.notifications,
           smtpPass: settings.notifications.smtpPass === '********'
             ? (cachedSettings.notifications?.smtpPass || '')
-            : settings.notifications.smtpPass
+            : settings.notifications.smtpPass,
+          telegramBotToken: settings.notifications.telegramBotToken?.includes('...')
+            ? (cachedSettings.notifications?.telegramBotToken || '')
+            : settings.notifications.telegramBotToken,
+          resendApiKey: settings.notifications.resendApiKey === 're_********'
+            ? (cachedSettings.notifications?.resendApiKey || '')
+            : settings.notifications.resendApiKey
         }
       };
 
@@ -463,24 +478,11 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
           {/* NOTIFICATIONS TAB */}
           {activeTab === 'notifications' && (
             <div className="space-y-4">
-              <div>
-                <label className="text-xs font-medium text-slate-500 block mb-1">接收結報的電子信箱 (Email) *</label>
-                <input
-                  type="email"
-                  placeholder="your.email@gmail.com"
-                  value={settings.notifications.emailRecipient}
-                  onChange={(e) => setSettings({
-                    ...settings,
-                    notifications: { ...settings.notifications, emailRecipient: e.target.value }
-                  })}
-                  className="w-full text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100">
+              {/* Daily schedule switch */}
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
                 <div>
-                  <span className="text-xs font-bold text-slate-800 block">每日定時自動結算</span>
-                  <span className="text-[11px] text-slate-400">固定於每晚 22:00 排程推播</span>
+                  <span className="text-xs font-bold text-slate-800 block">每日自動結報排程</span>
+                  <span className="text-[11px] text-slate-500">每晚 22:00 自動結算今日熱量、營養素與 AI 建議</span>
                 </div>
                 <input
                   type="checkbox"
@@ -493,83 +495,255 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
                 />
               </div>
 
-              <div className="border-t border-slate-100 pt-3 space-y-3">
-                <span className="text-xs font-semibold text-slate-700 block">SMTP 伺服器設定 (如使用 Gmail 寄件)</span>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] text-slate-400 block mb-1">SMTP Host</label>
-                    <input
-                      type="text"
-                      value={settings.notifications.smtpHost}
-                      onChange={(e) => setSettings({
-                        ...settings,
-                        notifications: { ...settings.notifications, smtpHost: e.target.value }
-                      })}
-                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-slate-50"
-                    />
+              {/* SECTION B: Google Apps Script Webhook */}
+              <div className="p-3.5 rounded-2xl border border-emerald-200 bg-emerald-50/40 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span className="text-xs font-bold text-emerald-900">方案 B：Google Apps Script (推薦！免網域寄 Gmail)</span>
                   </div>
-                  <div>
-                    <label className="text-[11px] text-slate-400 block mb-1">Port</label>
-                    <input
-                      type="number"
-                      value={settings.notifications.smtpPort}
-                      onChange={(e) => setSettings({
-                        ...settings,
-                        notifications: { ...settings.notifications, smtpPort: e.target.value }
-                      })}
-                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-slate-50"
-                    />
-                  </div>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">100% 免費</span>
                 </div>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  完全不需要租用網域或購買付費服務！利用 Google 提供的免費雲端小腳本，由您的個人 Gmail 帳號自動寄送 HTML 彩色結報給自己。
+                </p>
 
                 <div>
-                  <label className="text-[11px] text-slate-400 block mb-1">SMTP 帳號 (寄件者信箱)</label>
+                  <label className="text-[11px] font-medium text-slate-600 block mb-1">接收的 Email 信箱</label>
                   <input
                     type="email"
-                    placeholder="sender@gmail.com"
-                    value={settings.notifications.smtpUser}
+                    placeholder="your.email@gmail.com"
+                    value={settings.notifications.emailRecipient}
                     onChange={(e) => setSettings({
                       ...settings,
-                      notifications: { ...settings.notifications, smtpUser: e.target.value }
+                      notifications: { ...settings.notifications, emailRecipient: e.target.value }
                     })}
-                    className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-slate-50"
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-emerald-500"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] text-slate-400 block mb-1">應用程式專用密碼 (App Password)</label>
+                  <label className="text-[11px] font-medium text-slate-600 block mb-1">Google Apps Script 網頁應用程式網址 (Webhook URL)</label>
                   <input
-                    type="password"
-                    placeholder="Google 帳號安全性產生的 16 碼密碼"
-                    value={settings.notifications.smtpPass}
+                    type="url"
+                    placeholder="https://script.google.com/macros/s/.../exec"
+                    value={settings.notifications.gasWebhookUrl || ''}
                     onChange={(e) => setSettings({
                       ...settings,
-                      notifications: { ...settings.notifications, smtpPass: e.target.value }
+                      notifications: { ...settings.notifications, gasWebhookUrl: e.target.value }
                     })}
-                    className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 font-mono"
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono focus:outline-none focus:border-emerald-500"
                   />
                 </div>
 
-                <div className="pt-2 border-t border-slate-100">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[11px] text-slate-600 font-medium">或使用 Resend 免費 API Key (免設 SMTP・保證不被 Render 封鎖)</label>
-                    <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">推薦</span>
+                {/* Tutorial Accordion */}
+                <button
+                  type="button"
+                  onClick={() => setShowGasTutorial(!showGasTutorial)}
+                  className="text-[11px] text-emerald-700 font-medium flex items-center gap-1 hover:underline pt-1"
+                >
+                  {showGasTutorial ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  <span>查看「1 分鐘建立 Google Apps Script」極簡教學 & 腳本代碼</span>
+                </button>
+
+                {showGasTutorial && (
+                  <div className="bg-white p-3 rounded-xl border border-emerald-100 text-[11px] text-slate-600 space-y-2 animate-fadeIn">
+                    <ol className="list-decimal list-inside space-y-1 text-slate-700">
+                      <li>前往 <a href="https://script.google.com" target="_blank" rel="noreferrer" className="text-blue-600 underline">script.google.com</a> 點擊「新增專案」。</li>
+                      <li>將編輯器內的預設程式碼全部刪除，貼上下方代碼：</li>
+                    </ol>
+
+                    <div className="relative">
+                      <pre className="bg-slate-900 text-slate-100 p-2.5 rounded-lg text-[10px] overflow-x-auto font-mono max-h-32">
+{`function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    var recipient = data.recipient || Session.getActiveUser().getEmail();
+    var subject = data.subject || "【每日健康結報】";
+    MailApp.sendEmail({
+      to: recipient,
+      subject: subject,
+      htmlBody: data.htmlBody
+    });
+    return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}`}
+                      </pre>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const script = `function doPost(e) {\n  try {\n    var data = JSON.parse(e.postData.contents);\n    var recipient = data.recipient || Session.getActiveUser().getEmail();\n    var subject = data.subject || "【每日健康結報】";\n    MailApp.sendEmail({\n      to: recipient,\n      subject: subject,\n      htmlBody: data.htmlBody\n    });\n    return ContentService.createTextOutput(JSON.stringify({ status: "success" }))\n      .setMimeType(ContentService.MimeType.JSON);\n  } catch (err) {\n    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))\n      .setMimeType(ContentService.MimeType.JSON);\n  }\n}`;
+                          navigator.clipboard.writeText(script);
+                          setCopiedGasScript(true);
+                          setTimeout(() => setCopiedGasScript(false), 2000);
+                        }}
+                        className="absolute top-2 right-2 bg-emerald-600 text-white text-[10px] px-2 py-1 rounded shadow hover:bg-emerald-700 flex items-center gap-1"
+                      >
+                        {copiedGasScript ? <Check size={12} /> : <Copy size={12} />}
+                        {copiedGasScript ? '已複製！' : '複製代碼'}
+                      </button>
+                    </div>
+
+                    <ol start="3" className="list-decimal list-inside space-y-1 text-slate-700">
+                      <li>點選右上角「部署」➔「新增部署作業」。</li>
+                      <li>種類選擇「網頁應用程式」，並將<strong>「誰可以存取」設為「所有人 (Anyone)」</strong>。</li>
+                      <li>點擊「部署」並授權，複製產生的「網頁應用程式網址」貼到上方欄位即可！</li>
+                    </ol>
                   </div>
-                  <input
-                    type="password"
-                    placeholder="re_..."
-                    value={settings.notifications.resendApiKey || ''}
-                    onChange={(e) => setSettings({
-                      ...settings,
-                      notifications: { ...settings.notifications, resendApiKey: e.target.value }
-                    })}
-                    className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 font-mono"
-                  />
-                  <span className="text-[10px] text-slate-400 mt-1 block">
-                    Render 免費版主機會阻擋 SMTP 埠 (587/465)。若遇連線問題，可至 resend.com 免費取得 Key（每月 3000 封免費），走 HTTPS 443 永不被擋！
-                  </span>
+                )}
+              </div>
+
+              {/* SECTION C: Telegram Bot Push */}
+              <div className="p-3.5 rounded-2xl border border-sky-200 bg-sky-50/40 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-sky-500"></span>
+                    <span className="text-xs font-bold text-sky-900">方案 C：Telegram Bot 即時推播 (手機最快收到)</span>
+                  </div>
+                  <span className="text-[10px] bg-sky-100 text-sky-800 font-bold px-1.5 py-0.5 rounded">免信箱・零遺漏</span>
                 </div>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  晚上 10 點手機直接叮咚彈出今日結報（含卡路里、TDEE、營養素及 AI 營養師明日具體建議）。
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="text-[11px] font-medium text-slate-600 block mb-1">Telegram Bot Token</label>
+                    <input
+                      type="password"
+                      placeholder="123456789:ABCdefGhI..."
+                      value={settings.notifications.telegramBotToken || ''}
+                      onChange={(e) => setSettings({
+                        ...settings,
+                        notifications: { ...settings.notifications, telegramBotToken: e.target.value }
+                      })}
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono focus:outline-none focus:border-sky-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-medium text-slate-600 block mb-1">您的 Chat ID</label>
+                    <input
+                      type="text"
+                      placeholder="例如: 987654321"
+                      value={settings.notifications.telegramChatId || ''}
+                      onChange={(e) => setSettings({
+                        ...settings,
+                        notifications: { ...settings.notifications, telegramChatId: e.target.value }
+                      })}
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono focus:outline-none focus:border-sky-500"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowTgTutorial(!showTgTutorial)}
+                  className="text-[11px] text-sky-700 font-medium flex items-center gap-1 hover:underline pt-0.5"
+                >
+                  {showTgTutorial ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  <span>如何 1 分鐘免費取得 Telegram Token & Chat ID？</span>
+                </button>
+
+                {showTgTutorial && (
+                  <div className="bg-white p-3 rounded-xl border border-sky-100 text-[11px] text-slate-600 space-y-1.5 animate-fadeIn">
+                    <div>1. 在 Telegram 搜尋 <strong>@BotFather</strong>，輸入 <code>/newbot</code> 依照提示命名，即可取得 <strong>Bot Token</strong>。</div>
+                    <div>2. 在 Telegram 搜尋您的機器人並點擊 <strong>Start</strong> 發送任意訊息。</div>
+                    <div>3. 搜尋 <strong>@userinfobot</strong> 點擊 Start，它會立刻告訴您專屬的 <strong>Id (Chat ID)</strong>。</div>
+                  </div>
+                )}
+              </div>
+
+              {/* ADVANCED / SMTP COLLAPSIBLE */}
+              <div className="pt-2 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setShowSmtpAdvanced(!showSmtpAdvanced)}
+                  className="text-xs font-semibold text-slate-500 flex items-center justify-between w-full py-1 hover:text-slate-700"
+                >
+                  <span>進階設定：自訂 SMTP 伺服器 / Resend API Key</span>
+                  {showSmtpAdvanced ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                </button>
+
+                {showSmtpAdvanced && (
+                  <div className="pt-3 space-y-3 animate-fadeIn">
+                    <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200 text-[10px] text-amber-800">
+                      ⚠️ 注意：Render 免費版防火牆已封鎖對外 SMTP Port (587/465)，若使用 Render 主機請優先採用上方「方案 B (GAS)」或「方案 C (Telegram)」。
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] text-slate-400 block mb-1">SMTP Host</label>
+                        <input
+                          type="text"
+                          value={settings.notifications.smtpHost}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            notifications: { ...settings.notifications, smtpHost: e.target.value }
+                          })}
+                          className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-slate-50"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-slate-400 block mb-1">Port</label>
+                        <input
+                          type="number"
+                          value={settings.notifications.smtpPort}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            notifications: { ...settings.notifications, smtpPort: e.target.value }
+                          })}
+                          className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-slate-50"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] text-slate-400 block mb-1">SMTP 帳號 (寄件者)</label>
+                      <input
+                        type="email"
+                        placeholder="sender@gmail.com"
+                        value={settings.notifications.smtpUser}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          notifications: { ...settings.notifications, smtpUser: e.target.value }
+                        })}
+                        className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-slate-50"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] text-slate-400 block mb-1">應用程式專用密碼 (App Password)</label>
+                      <input
+                        type="password"
+                        placeholder="Google 帳號安全性產生的 16 碼密碼"
+                        value={settings.notifications.smtpPass}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          notifications: { ...settings.notifications, smtpPass: e.target.value }
+                        })}
+                        className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] text-slate-400 block mb-1">Resend API Key (選填)</label>
+                      <input
+                        type="password"
+                        placeholder="re_..."
+                        value={settings.notifications.resendApiKey || ''}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          notifications: { ...settings.notifications, resendApiKey: e.target.value }
+                        })}
+                        className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

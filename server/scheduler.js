@@ -11,10 +11,12 @@ export function initScheduler() {
   dailyTask = cron.schedule('0 22 * * *', async () => {
     try {
       const settings = db.getSettings();
-      if (settings.notifications?.dailyDigestEnabled && settings.notifications?.emailRecipient) {
+      const notif = settings.notifications || {};
+      const hasAnyChannel = notif.gasWebhookUrl || (notif.telegramBotToken && notif.telegramChatId) || notif.lineToken || notif.emailRecipient;
+      if (notif.dailyDigestEnabled && hasAnyChannel) {
         console.log('[Cron] Running daily nutrition and weight digest at 22:00...');
         await sendDailyDigest();
-        console.log('[Cron] Daily digest email sent successfully.');
+        console.log('[Cron] Daily digest sent successfully.');
       }
     } catch (err) {
       console.error('[Cron] Error executing daily digest:', err.message);

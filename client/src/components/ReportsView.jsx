@@ -135,14 +135,17 @@ export default function ReportsView({ currentDate, onDataChanged }) {
       }
 
       if (!res.ok) {
-        throw new Error(data.error || '發送失敗，請確認郵件設定');
+        throw new Error(data.error || '發送失敗，請確認推播與郵件設定');
       }
 
-      showFeedback(`✅ 已成功發送結報至 ${data.recipient || '指定信箱'}！`, 'success', 6000);
+      const successMsg = data.summary
+        ? `✅ ${data.summary}`
+        : `✅ 已成功發送結報至 ${data.recipient || '指定管道'}！`;
+      showFeedback(successMsg, 'success', 6000);
     } catch (err) {
       console.error('Send report error:', err);
       if (err.name === 'AbortError') {
-        showFeedback('⚠️ 發送逾時：Render 免費版雲端防火牆阻擋了外發 SMTP 連線。建議點選「📲 手機郵件 App」一鍵寄出！', 'error', 9000);
+        showFeedback('⚠️ 發送逾時：Render 雲端封鎖了 SMTP 連線。請至設定中配置「方案 B (Google Apps Script)」或「方案 C (Telegram)」！', 'error', 9000);
       } else {
         showFeedback(`⚠️ ${err.message}`, 'error', 9000);
       }
