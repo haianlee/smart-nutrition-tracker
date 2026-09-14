@@ -35,7 +35,7 @@ export function createTransporter(settings) {
   });
 }
 
-export function buildDailyReportHtml(summary, settings) {
+export function buildDailyReportHtml(summary, settings, advice = null) {
   const dateStr = summary.date;
   const isDeficit = summary.deficit >= 0;
   const deficitColor = isDeficit ? '#10b981' : '#ef4444';
@@ -119,6 +119,39 @@ export function buildDailyReportHtml(summary, settings) {
         </table>
       </div>
 
+      <!-- AI Advisor & Tomorrow Planner -->
+      ${advice ? `
+      <div style="padding: 20px 24px; background: #f0fdf4; border-bottom: 1px solid #dcfce7;">
+        <div style="margin-bottom: 10px;">
+          <h3 style="margin: 0 0 4px 0; font-size: 16px; color: #166534;">🤖 AI 營養師總結與明日規劃</h3>
+          <span style="display: inline-block; background: #bbf7d0; color: #15803d; font-size: 12px; font-weight: bold; padding: 2px 8px; border-radius: 999px;">
+            評分：${advice.score} 分 (${advice.grade})
+          </span>
+        </div>
+        <p style="margin: 0 0 12px 0; font-size: 13px; line-height: 1.6; color: #14532d;">
+          ${advice.summary}
+        </p>
+
+        <!-- Highlights & Warnings -->
+        <div style="margin-bottom: 12px; font-size: 12px;">
+          ${(advice.highlights || []).map(h => `<div style="color: #15803d; margin-bottom: 3px;">✅ ${h}</div>`).join('')}
+          ${(advice.warnings || []).map(w => `<div style="color: #b45309; margin-bottom: 3px;">⚠️ ${w}</div>`).join('')}
+        </div>
+
+        <!-- Tomorrow Plan -->
+        ${advice.tomorrowPlan ? `
+        <div style="background: white; border-radius: 8px; padding: 12px; border: 1px solid #bbf7d0; font-size: 12px;">
+          <strong style="color: #166534; display: block; margin-bottom: 6px;">📅 明日具體飲食建議：</strong>
+          <div style="color: #475569; margin-bottom: 4px;">🎯 ${advice.tomorrowPlan.calorieTargetNote || ''}</div>
+          <div style="color: #475569; margin-bottom: 8px;">🥗 ${advice.tomorrowPlan.macroFocus || ''}</div>
+          ${(advice.tomorrowPlan.suggestedMeals || []).map(sm => `
+            <div style="margin-bottom: 4px; color: #334155;"><strong>[${sm.mealType}]</strong> ${sm.tip}</div>
+          `).join('')}
+        </div>
+        ` : ''}
+      </div>
+      ` : ''}
+
       <!-- Meal Details -->
       <div style="padding: 20px 24px;">
         <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #334155;">📋 今日餐食明細 (${summary.mealCount} 餐)</h3>
@@ -159,7 +192,8 @@ export async function sendDailyDigest(dateStr = null) {
   }
 
   const summary = db.getDailySummary(dateStr);
-  const html = buildDailyReportHtml(summary, settings);
+  const advice = db.getDailyAdvice(summary.date);
+  const html = buildDailyReportHtml(summary, settings, advice);
 
   // 1. If user provided a Resend API Key, use Resend HTTP API (Port 443, 100% immune to Render SMTP block)
   if (notif.resendApiKey && notif.resendApiKey.trim()) {

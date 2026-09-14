@@ -15,14 +15,19 @@ import {
   RotateCcw,
   CheckCircle2,
   Share2,
-  Smartphone
+  Smartphone,
+  Bot,
+  RefreshCw
 } from 'lucide-react';
 import { getLocalDateStr, stepDateStr, formatFriendlyDate } from '../utils/dateUtils';
 
 export default function ReportsView({ currentDate, onDataChanged }) {
   const [reportDate, setReportDate] = useState(currentDate || getLocalDateStr());
   const [dailySummary, setDailySummary] = useState(null);
+  const [dailyAdvice, setDailyAdvice] = useState(null);
   const [isLoadingDaily, setIsLoadingDaily] = useState(false);
+  const [isLoadingAdvice, setIsLoadingAdvice] = useState(false);
+  const [isGeneratingAdvice, setIsGeneratingAdvice] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
@@ -57,8 +62,34 @@ export default function ReportsView({ currentDate, onDataChanged }) {
     }
   };
 
+  const fetchAdvice = async (targetDate = reportDate) => {
+    setIsLoadingAdvice(true);
+    try {
+      const localCache = JSON.parse(localStorage.getItem(`nt_advice_${targetDate}`) || 'null');
+      if (localCache) {
+        setDailyAdvice(localCache);
+      }
+
+      const res = await fetch(`/api/ai-daily-advice?date=${encodeURIComponent(targetDate)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data) {
+          setDailyAdvice(data);
+          localStorage.setItem(`nt_advice_${targetDate}`, JSON.stringify(data));
+        } else if (!localCache) {
+          setDailyAdvice(null);
+        }
+      }
+    } catch (err) {
+      console.error('Error in fetchAdvice:', err);
+    } finally {
+      setIsLoadingAdvice(false);
+    }
+  };
+
   useEffect(() => {
     fetchDaily(reportDate);
+    fetchAdvice(reportDate);
   }, [reportDate]);
 
   const handlePrevDay = () => {
@@ -120,6 +151,41 @@ export default function ReportsView({ currentDate, onDataChanged }) {
     }
   };
 
+  const handleGenerateAdvice = async (forceRefresh = false) => {
+    setIsGeneratingAdvice(true);
+    try {
+      const cachedKey = localStorage.getItem('gemini_api_key') || '';
+      const headers = { 'Content-Type': 'application/json' };
+      if (cachedKey) {
+        headers['x-gemini-key'] = cachedKey;
+      }
+
+      const res = await fetch('/api/ai-daily-advice', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          date: reportDate,
+          forceRefresh
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || '生成建議失敗');
+      }
+
+      const data = await res.json();
+      setDailyAdvice(data);
+      localStorage.setItem(`nt_advice_${reportDate}`, JSON.stringify(data));
+      showFeedback('✨ AI 營養師已完成今日飲食診斷與明日規劃！', 'success', 4000);
+    } catch (err) {
+      console.error('Error generating advice:', err);
+      showFeedback(`診斷失敗: ${err.message}`, 'error', 5000);
+    } finally {
+      setIsGeneratingAdvice(false);
+    }
+  };
+
   const handleSendViaNativeMail = () => {
     if (!dailySummary) return;
     const isDef = (dailySummary.deficit ?? 0) >= 0;
@@ -131,6 +197,21 @@ export default function ReportsView({ currentDate, onDataChanged }) {
     bodyText += `⚖️ TDEE 淨盈虧：${defTxt} kcal (維持熱量: ${dailySummary.tdee || 2200} kcal)\n`;
     bodyText += `🏃 今日體重：${dailySummary.weight ? dailySummary.weight + ' kg' : '未記錄'}\n\n`;
     bodyText += `🥩 三大營養素：\n- 蛋白質：${dailySummary.totalProtein || 0}g\n- 碳水化合物：${dailySummary.totalCarbs || 0}g\n- 脂肪：${dailySummary.totalFat || 0}g\n- 膳食纖維：${dailySummary.totalFiber || 0}g\n\n`;
+
+    if (dailyAdvice) {
+      bodyText += `🤖【AI 營養師診斷・${dailyAdvice.grade} (${dailyAdvice.score}分)】\n`;
+      bodyText += `${dailyAdvice.summary}\n`;
+      if (dailyAdvice.tomorrowPlan) {
+        bodyText += `\n📅【明日飲食規劃重點】\n`;
+        bodyText += `- 目標：${dailyAdvice.tomorrowPlan.calorieTargetNote || ''}\n`;
+        bodyText += `- 重點：${dailyAdvice.tomorrowPlan.macroFocus || ''}\n`;
+        (dailyAdvice.tomorrowPlan.suggestedMeals || []).forEach(sm => {
+          bodyText += `  • [${sm.mealType}] ${sm.tip}\n`;
+        });
+      }
+      bodyText += `\n`;
+    }
+
     bodyText += `📋 今日餐點明細 (${dailySummary.meals?.length || 0} 餐)：\n`;
     (dailySummary.meals || []).forEach(m => {
       bodyText += `- [${m.time || '--:--'}] ${m.foodName} (${m.estimatedWeightG || 0}g) : ${m.calories || 0} kcal\n`;
@@ -149,6 +230,14 @@ export default function ReportsView({ currentDate, onDataChanged }) {
     shareText += `⚖️ TDEE 盈虧：${defTxt} kcal\n`;
     if (dailySummary.weight) shareText += `🏃 體重：${dailySummary.weight} kg\n`;
     shareText += `🥩 蛋白質 ${dailySummary.totalProtein || 0}g | 🍚 碳水 ${dailySummary.totalCarbs || 0}g | 🥑 脂肪 ${dailySummary.totalFat || 0}g\n`;
+
+    if (dailyAdvice) {
+      shareText += `\n🤖 AI評級：${dailyAdvice.grade} (${dailyAdvice.score}分)\n`;
+      shareText += `💡 總結：${dailyAdvice.summary}\n`;
+      if (dailyAdvice.tomorrowPlan?.macroFocus) {
+        shareText += `🎯 明日重點：${dailyAdvice.tomorrowPlan.macroFocus}\n`;
+      }
+    }
 
     if (navigator.share) {
       try {
@@ -282,6 +371,188 @@ export default function ReportsView({ currentDate, onDataChanged }) {
             <RotateCcw size={13} />
             <span>回今天</span>
           </button>
+        )}
+      </div>
+
+      {/* AI Advisor & Tomorrow Planner Hero Card */}
+      <div className="bg-gradient-to-br from-slate-900 via-teal-950 to-emerald-950 text-white rounded-3xl p-5 sm:p-6 shadow-xl border border-teal-500/30 relative overflow-hidden">
+        {/* Ambient background decoration */}
+        <div className="absolute -top-12 -right-12 w-40 h-40 bg-teal-500/10 rounded-full blur-2xl pointer-events-none" />
+        <div className="absolute -bottom-10 -left-10 w-36 h-36 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+
+        {/* Card Header */}
+        <div className="flex items-center justify-between mb-4 relative z-10">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-2xl bg-teal-400/20 text-teal-300 border border-teal-400/30">
+              <Bot size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-white">AI 營養師：今日診斷與明日規劃</h2>
+                {dailyAdvice?.isMock && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium">
+                    離線示範
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-teal-200/70">
+                依據 {reportDate} 飲食組合、熱量赤字與巨量營養素即時診斷
+              </p>
+            </div>
+          </div>
+
+          {dailyAdvice && !isGeneratingAdvice && (
+            <button
+              onClick={() => handleGenerateAdvice(true)}
+              disabled={isGeneratingAdvice}
+              className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-teal-200 transition active:scale-95 text-xs flex items-center gap-1 border border-white/10"
+              title="重新由 AI 進行今日診斷"
+            >
+              <RefreshCw size={13} className={isGeneratingAdvice ? 'animate-spin' : ''} />
+              <span className="hidden sm:inline">重新分析</span>
+            </button>
+          )}
+        </div>
+
+        {/* Content States */}
+        {isGeneratingAdvice ? (
+          <div className="py-8 flex flex-col items-center justify-center text-center space-y-3 relative z-10 animate-fadeIn">
+            <div className="relative">
+              <div className="w-12 h-12 border-4 border-teal-500/30 border-t-teal-400 rounded-full animate-spin" />
+              <Sparkles size={18} className="absolute inset-0 m-auto text-teal-300 animate-pulse" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-teal-100">AI 營養師正在閱覽今日餐點與營養素...</p>
+              <p className="text-xs text-teal-300/70 mt-1">分析熱量赤字平衡，為您訂製明日最佳菜單與生活指引</p>
+            </div>
+          </div>
+        ) : dailyAdvice ? (
+          <div className="space-y-4 relative z-10 animate-fadeIn">
+            {/* Score & Grade Banner */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/10 p-3.5 rounded-2xl border border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex flex-col items-center justify-center text-white font-black shadow-md shrink-0">
+                  <span className="text-base leading-none">{dailyAdvice.score}</span>
+                  <span className="text-[9px] opacity-80 mt-0.5">分</span>
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-teal-300 px-2 py-0.5 rounded-full bg-teal-500/20 border border-teal-500/30 inline-block mb-1">
+                    {dailyAdvice.grade}
+                  </span>
+                  <p className="text-xs text-slate-100 leading-relaxed font-medium">
+                    {dailyAdvice.summary}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Highlights & Warnings Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* Highlights */}
+              <div className="bg-emerald-950/50 border border-emerald-500/30 p-3 rounded-2xl">
+                <span className="text-xs font-bold text-emerald-300 flex items-center gap-1 mb-2">
+                  <CheckCircle2 size={14} className="text-emerald-400" />
+                  今日達標亮點
+                </span>
+                <ul className="space-y-1.5 text-xs text-slate-200">
+                  {(dailyAdvice.highlights || []).map((h, i) => (
+                    <li key={i} className="flex items-start gap-1.5 leading-snug">
+                      <span className="text-emerald-400 shrink-0 font-bold">•</span>
+                      <span>{h}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Warnings */}
+              <div className="bg-amber-950/40 border border-amber-500/30 p-3 rounded-2xl">
+                <span className="text-xs font-bold text-amber-300 flex items-center gap-1 mb-2">
+                  <AlertCircle size={14} className="text-amber-400" />
+                  需注意之失衡與微調
+                </span>
+                <ul className="space-y-1.5 text-xs text-slate-200">
+                  {(dailyAdvice.warnings || []).map((w, i) => (
+                    <li key={i} className="flex items-start gap-1.5 leading-snug">
+                      <span className="text-amber-400 shrink-0 font-bold">•</span>
+                      <span>{w}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            {/* Tomorrow Plan Section */}
+            {dailyAdvice.tomorrowPlan && (
+              <div className="bg-white/10 rounded-2xl p-3.5 border border-white/10 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-white/10 pb-2">
+                  <span className="text-xs font-bold text-teal-200 flex items-center gap-1.5">
+                    <Calendar size={14} className="text-teal-400" />
+                    明日飲食規劃藍圖 (Tomorrow's Blueprint)
+                  </span>
+                  <span className="text-[11px] text-teal-300/80 font-medium">
+                    {dailyAdvice.tomorrowPlan.calorieTargetNote || ''}
+                  </span>
+                </div>
+
+                {dailyAdvice.tomorrowPlan.macroFocus && (
+                  <div className="text-xs text-emerald-200 bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/20 flex items-start gap-1.5">
+                    <Sparkles size={14} className="text-emerald-400 shrink-0 mt-0.5" />
+                    <span><strong>補強重點：</strong>{dailyAdvice.tomorrowPlan.macroFocus}</span>
+                  </div>
+                )}
+
+                {/* 3 Meals suggestions */}
+                {dailyAdvice.tomorrowPlan.suggestedMeals && dailyAdvice.tomorrowPlan.suggestedMeals.length > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                    {dailyAdvice.tomorrowPlan.suggestedMeals.map((sm, idx) => (
+                      <div key={idx} className="bg-slate-900/60 p-2.5 rounded-xl border border-white/5 space-y-1">
+                        <span className="text-[11px] font-bold text-teal-300 px-1.5 py-0.5 rounded bg-teal-500/20 inline-block">
+                          {sm.mealType}
+                        </span>
+                        <p className="text-xs text-slate-200 leading-snug">
+                          {sm.tip}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Habits */}
+                {dailyAdvice.tomorrowPlan.actionableHabits && dailyAdvice.tomorrowPlan.actionableHabits.length > 0 && (
+                  <div className="pt-2 border-t border-white/10 space-y-1 text-xs text-slate-300">
+                    <span className="font-semibold text-teal-200 block text-[11px]">💡 生活與飲水叮嚀：</span>
+                    {dailyAdvice.tomorrowPlan.actionableHabits.map((habit, idx) => (
+                      <div key={idx} className="flex items-start gap-1.5 text-slate-300 leading-tight">
+                        <span className="text-teal-400 font-bold shrink-0">✔</span>
+                        <span>{habit}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Empty / Unanalyzed state */
+          <div className="bg-white/5 rounded-2xl p-5 text-center border border-white/10 space-y-3 relative z-10">
+            <div className="w-10 h-10 rounded-2xl bg-teal-500/20 text-teal-300 flex items-center justify-center mx-auto border border-teal-500/30">
+              <Sparkles size={20} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white">尚未生成今日飲食診斷與明日規劃</h3>
+              <p className="text-xs text-slate-300 mt-1 max-w-md mx-auto leading-relaxed">
+                由 AI 營養師全面盤點今日攝取熱量、赤字比率與巨量營養素平衡，為您總結成效並訂定隔日具體外食/自煮菜單指引！
+              </p>
+            </div>
+            <button
+              onClick={() => handleGenerateAdvice(false)}
+              disabled={isGeneratingAdvice}
+              className="py-2.5 px-5 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 font-bold text-xs text-white shadow-lg shadow-teal-500/25 transition active:scale-95 inline-flex items-center gap-2"
+            >
+              <Sparkles size={15} />
+              <span>⚡ 生成今日 AI 飲食診斷與明日規劃</span>
+            </button>
+          </div>
         )}
       </div>
 

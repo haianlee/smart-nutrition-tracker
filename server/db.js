@@ -40,6 +40,7 @@ export function getSystemTimeStr() {
 const defaultData = {
   meals: [],
   weights: [],
+  dailyAdvice: {},
   settings: {
     isCustomized: false,
     updatedAt: null,
@@ -85,6 +86,7 @@ function readDb() {
     return {
       meals: parsed.meals || [],
       weights: parsed.weights || [],
+      dailyAdvice: parsed.dailyAdvice || {},
       settings: { ...defaultData.settings, ...(parsed.settings || {}) }
     };
   } catch (err) {
@@ -396,9 +398,30 @@ export const db = {
     };
   },
 
-  // --- AUTO SYNC & PERSISTENCE ---
-  syncData({ meals = [], weights = [], settings = null }) {
+  // --- AI DAILY ADVICE ---
+  getDailyAdvice(date) {
     const data = readDb();
+    const dateStr = date || getSystemDateStr();
+    return data.dailyAdvice ? data.dailyAdvice[dateStr] || null : null;
+  },
+
+  saveDailyAdvice(date, advice) {
+    const data = readDb();
+    if (!data.dailyAdvice) {
+      data.dailyAdvice = {};
+    }
+    const dateStr = date || getSystemDateStr();
+    data.dailyAdvice[dateStr] = advice;
+    writeDb(data);
+    return advice;
+  },
+
+  // --- AUTO SYNC & PERSISTENCE ---
+  syncData({ meals = [], weights = [], settings = null, dailyAdvice = null }) {
+    const data = readDb();
+    if (dailyAdvice && typeof dailyAdvice === 'object') {
+      data.dailyAdvice = { ...(data.dailyAdvice || {}), ...dailyAdvice };
+    }
 
     // Merge meals by ID
     const mealMap = new Map();

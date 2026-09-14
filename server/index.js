@@ -7,7 +7,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 import { db, getSystemDateStr } from './db.js';
-import { analyzeFoodWithGemini } from './gemini.js';
+import { analyzeFoodWithGemini, generateDailyDietAdvice } from './gemini.js';
 import { sendDailyDigest, buildDailyReportHtml } from './mailer.js';
 import { initScheduler } from './scheduler.js';
 
@@ -184,6 +184,48 @@ app.get('/api/stats/trends', (req, res) => {
   }
 });
 
+// 4.5 AI Daily Diet Advisor & Tomorrow Planner
+app.get('/api/ai-daily-advice', (req, res) => {
+  try {
+    const { date } = req.query;
+    const advice = db.getDailyAdvice(date);
+    res.json(advice || null);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/ai-daily-advice', async (req, res) => {
+  try {
+    const { date, forceRefresh } = req.body;
+    const dateStr = date || getSystemDateStr();
+
+    if (!forceRefresh) {
+      const cached = db.getDailyAdvice(dateStr);
+      if (cached) {
+        return res.json(cached);
+      }
+    }
+
+    const summary = db.getDailySummary(dateStr);
+    const settings = db.getSettings();
+    const apiKey = req.headers['x-gemini-key'] || settings.geminiApiKey || process.env.GEMINI_API_KEY;
+
+    const advice = await generateDailyDietAdvice({
+      dailySummary: summary,
+      userProfile: settings.userProfile || {},
+      apiKey,
+      model: settings.geminiModel || 'gemini-flash-lite-latest'
+    });
+
+    db.saveDailyAdvice(dateStr, advice);
+    res.json(advice);
+  } catch (err) {
+    console.error('Error in /api/ai-daily-advice:', err);
+    res.status(500).json({ error: err.message || '生成 AI 飲食建議失敗' });
+  }
+});
+
 // 5. Settings API
 app.get('/api/settings', (req, res) => {
   try {
@@ -234,7 +276,8 @@ app.get('/api/preview-report-html', (req, res) => {
     const { date } = req.query;
     const settings = db.getSettings();
     const summary = db.getDailySummary(date);
-    const html = buildDailyReportHtml(summary, settings);
+    const advice = db.getDailyAdvice(summary.date);
+    const html = buildDailyReportHtml(summary, settings, advice);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(html);
   } catch (err) {
