@@ -9,6 +9,7 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
   const [showSmtpAdvanced, setShowSmtpAdvanced] = useState(false);
   const [showGasTutorial, setShowGasTutorial] = useState(false);
   const [showTgTutorial, setShowTgTutorial] = useState(false);
+  const [showLineTutorial, setShowLineTutorial] = useState(false);
 
   const [settings, setSettings] = useState(() => {
     try {
@@ -38,6 +39,7 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
           telegramBotToken: '',
           telegramChatId: '',
           lineToken: '',
+          lineUserId: '',
           smtpHost: 'smtp.gmail.com',
           smtpPort: 587,
           smtpSecure: false,
@@ -225,6 +227,9 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
           telegramBotToken: settings.notifications.telegramBotToken?.includes('...')
             ? (cachedSettings.notifications?.telegramBotToken || '')
             : settings.notifications.telegramBotToken,
+          lineToken: settings.notifications.lineToken?.includes('...')
+            ? (cachedSettings.notifications?.lineToken || '')
+            : settings.notifications.lineToken,
           resendApiKey: settings.notifications.resendApiKey === 're_********'
             ? (cachedSettings.notifications?.resendApiKey || '')
             : settings.notifications.resendApiKey
@@ -653,6 +658,75 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
                     <div>1. 在 Telegram 搜尋 <strong>@BotFather</strong>，輸入 <code>/newbot</code> 依照提示命名，即可取得 <strong>Bot Token</strong>。</div>
                     <div>2. 在 Telegram 搜尋您的機器人並點擊 <strong>Start</strong> 發送任意訊息。</div>
                     <div>3. 搜尋 <strong>@userinfobot</strong> 點擊 Start，它會立刻告訴您專屬的 <strong>Id (Chat ID)</strong>。</div>
+                  </div>
+                )}
+              </div>
+
+              {/* SECTION LINE: LINE Messaging API */}
+              <div className="p-3.5 rounded-2xl border border-emerald-300 bg-emerald-50/50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-[#06c755]"></span>
+                    <span className="text-xs font-bold text-slate-800">方案 LINE：LINE 官方機器人即時推播 (台灣最常用)</span>
+                  </div>
+                  <span className="text-[10px] bg-[#06c755]/15 text-[#06c755] font-bold px-1.5 py-0.5 rounded">每月 200 則免費</span>
+                </div>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  每晚 22:00 或點選結報，由您專屬的 LINE 營養師機器人直接發送當日卡路里、TDEE 盈虧與 AI 建議到您的 LINE！
+                </p>
+
+                <div className="space-y-2.5">
+                  <div>
+                    <label className="text-[11px] font-medium text-slate-600 block mb-1">LINE Channel Access Token (長期權杖)</label>
+                    <input
+                      type="password"
+                      placeholder="貼上 LINE Developers 後台生成的 Channel Access Token..."
+                      value={settings.notifications.lineToken || ''}
+                      onChange={(e) => setSettings({
+                        ...settings,
+                        notifications: { ...settings.notifications, lineToken: e.target.value }
+                      })}
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono focus:outline-none focus:border-[#06c755]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-medium text-slate-600 block mb-1">您的個人 LINE User ID (以 U 開頭)</label>
+                    <input
+                      type="text"
+                      placeholder="例如: U1234567890abcdef1234567890abcdef"
+                      value={settings.notifications.lineUserId || ''}
+                      onChange={(e) => setSettings({
+                        ...settings,
+                        notifications: { ...settings.notifications, lineUserId: e.target.value }
+                      })}
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 bg-white font-mono focus:outline-none focus:border-[#06c755]"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowLineTutorial(!showLineTutorial)}
+                  className="text-[11px] text-[#06c755] font-semibold flex items-center gap-1 hover:underline pt-0.5"
+                >
+                  {showLineTutorial ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  <span>查看「3 分鐘建立 LINE 官方機器人」步驟教學</span>
+                </button>
+
+                {showLineTutorial && (
+                  <div className="bg-white p-3.5 rounded-xl border border-emerald-100 text-[11px] text-slate-700 space-y-2 animate-fadeIn">
+                    <ol className="list-decimal list-inside space-y-1.5">
+                      <li>前往 <a href="https://developers.line.biz/" target="_blank" rel="noreferrer" className="text-blue-600 underline font-medium">LINE Developers Console</a>，使用個人 LINE 帳號登入。</li>
+                      <li>點擊「Create a new provider」，輸入名稱（例如：<code>健康管理</code>）。</li>
+                      <li>點擊「Create a Messaging API channel」：
+                        <ul className="list-disc list-inside pl-3 pt-0.5 text-slate-500 text-[10px]">
+                          <li>名稱填「AI 營養管家」，分類隨意選（如 Health），勾選同意條款並送出。</li>
+                        </ul>
+                      </li>
+                      <li>進入「Messaging API」頁籤，用手機 LINE 掃描頁面上的 <strong>QR Code 加機器人為好友</strong>。</li>
+                      <li>在頁籤最下方找到 <strong>Channel access token (long-lived)</strong>，點擊「Issue」複製 Token 貼到上方第一欄。</li>
+                      <li>在「Basic settings」頁籤最下方，複製 <strong>Your user ID</strong>（開頭為 U）貼到上方第二欄即可！</li>
+                    </ol>
                   </div>
                 )}
               </div>

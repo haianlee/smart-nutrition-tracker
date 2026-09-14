@@ -237,6 +237,7 @@ app.get('/api/settings', (req, res) => {
         ...settings.notifications,
         smtpPass: settings.notifications?.smtpPass ? '********' : '',
         telegramBotToken: settings.notifications?.telegramBotToken ? (settings.notifications.telegramBotToken.slice(0, 4) + '...' + settings.notifications.telegramBotToken.slice(-4)) : '',
+        lineToken: settings.notifications?.lineToken ? (settings.notifications.lineToken.slice(0, 4) + '...' + settings.notifications.lineToken.slice(-4)) : '',
         resendApiKey: settings.notifications?.resendApiKey ? 're_********' : ''
       }
     };
@@ -255,6 +256,9 @@ app.post('/api/settings', (req, res) => {
     }
     if (payload.notifications?.telegramBotToken?.includes('...')) {
       delete payload.notifications.telegramBotToken;
+    }
+    if (payload.notifications?.lineToken?.includes('...')) {
+      delete payload.notifications.lineToken;
     }
     if (payload.notifications?.resendApiKey === 're_********') {
       delete payload.notifications.resendApiKey;

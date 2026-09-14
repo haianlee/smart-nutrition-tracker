@@ -301,31 +301,66 @@ export async function sendDailyDigest(dateStr = null) {
   }
 
   // ==========================================
-  // 3. 方案 C: LINE Notify / Messaging API Webhook
+  // 3. 方案 C: LINE 官方機器人 (Messaging API) / LINE Notify
   // ==========================================
   if (notif.lineToken && notif.lineToken.trim()) {
-    try {
-      const lineToken = notif.lineToken.trim();
-      const lineRes = await fetch('https://notify-api.line.me/api/notify', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${lineToken}`,
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        body: new URLSearchParams({
-          message: `\n${textSummary}`
-        })
-      });
+    const token = notif.lineToken.trim();
+    const userId = notif.lineUserId ? notif.lineUserId.trim() : '';
 
-      const lineData = await lineRes.json();
-      if (lineRes.ok && lineData.status === 200) {
-        results.push({ provider: 'line', message: '已透過 LINE 成功發送推播！' });
-      } else {
-        throw new Error(lineData.message || 'LINE API 回應錯誤');
+    // If userId is provided, use the permanent official LINE Messaging API
+    if (userId) {
+      try {
+        const lineMsgRes = await fetch('https://api.line.me/v2/bot/message/push', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            to: userId,
+            messages: [
+              {
+                type: 'text',
+                text: textSummary
+              }
+            ]
+          })
+        });
+
+        const lineMsgData = await lineMsgRes.json();
+        if (lineMsgRes.ok) {
+          results.push({ provider: 'line', message: '已透過 LINE 官方機器人成功推播至您的 LINE！' });
+        } else {
+          throw new Error(lineMsgData.message || (lineMsgData.details && lineMsgData.details[0]?.message) || 'LINE Messaging API 錯誤');
+        }
+      } catch (err) {
+        console.error('LINE Messaging API error:', err);
+        errors.push(`LINE 官方機器人推播失敗: ${err.message}`);
       }
-    } catch (err) {
-      console.error('LINE send error:', err);
-      errors.push(`LINE 推播失敗: ${err.message}`);
+    } else {
+      // Fallback to LINE Notify (legacy)
+      try {
+        const lineRes = await fetch('https://notify-api.line.me/api/notify', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: new URLSearchParams({
+            message: `\n${textSummary}`
+          })
+        });
+
+        const lineData = await lineRes.json();
+        if (lineRes.ok && lineData.status === 200) {
+          results.push({ provider: 'line', message: '已透過 LINE Notify 成功發送推播！' });
+        } else {
+          throw new Error(lineData.message || 'LINE Notify API 回應錯誤');
+        }
+      } catch (err) {
+        console.error('LINE Notify send error:', err);
+        errors.push(`LINE 推播失敗: ${err.message}`);
+      }
     }
   }
 

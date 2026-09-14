@@ -68,6 +68,7 @@ const defaultData = {
       telegramBotToken: '',
       telegramChatId: '',
       lineToken: '',
+      lineUserId: '',
       // Legacy / Custom SMTP
       smtpHost: 'smtp.gmail.com',
       smtpPort: 587,
