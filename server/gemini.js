@@ -16,6 +16,7 @@ const SYSTEM_PROMPT = `
 
 【重要輸出規則】
 - 必須「只輸出標準 JSON」，不要包含任何額外的 Markdown 標記（例如不要包裹 \`\`\`json ），確保可被直接 JSON.parse()。
+- 【零熱量/低熱量特別規則】：水、無糖茶（無糖綠茶、無糖烏龍茶、無糖紅茶、無糖青茶、麥茶、普洱茶等）、黑咖啡、零卡可樂/氣泡水、代糖飲品等，其總熱量 (calories)、蛋白質 (protein_g)、碳水化合物 (carbs_g)、脂肪 (fat_g) 必須嚴格標示為 0（或接近0的真實數值），絕對不可誤估為有糖飲料或高熱量食物！
 - 請嚴格遵循此格式：
 {
   "food_name": "照燒雞腿便當",
@@ -64,8 +65,10 @@ export async function analyzeFoodWithGemini({ imageBuffer, mimeType, textInput, 
 
   const promptText = textInput 
     ? `使用者輸入食物品名或份量說明：「${textInput}」。
-【特別規範】若使用者輸入包含具體商品名稱（例如特定品牌包裝食品）或明確重量（例如「孔雀捲心餅 63g」），請嚴格鎖定該指定品項與明確克數，推估或檢索其真實包裝營養標示，切勿覆寫或忽視使用者的克數！`
-    : `請分析照片中的食物營養素與熱量。`;
+【特別規範】
+1. 若使用者輸入包含具體商品名稱（例如特定品牌包裝食品）或明確重量（例如「孔雀捲心餅 63g」），請嚴格鎖定該指定品項與明確克數，推估或檢索其真實包裝營養標示，切勿覆寫或忽視使用者的克數！
+2. 若為「無糖茶」（如無糖烏龍茶、無糖綠茶、無糖紅茶、麥茶、四季春等）、「水」、「黑咖啡」或標明「無糖/零卡/0卡」之飲品，總熱量 calories 必須為 0 kcal，蛋白質、碳水化合物、脂肪皆為 0g！`
+    : `請分析照片中的食物營養素與熱量。若為無糖茶水或黑咖啡等無熱量飲品，請準確評估熱量為 0 kcal。`;
 
   parts.push({ text: promptText });
   contents.push({ parts });
@@ -115,16 +118,27 @@ export async function analyzeFoodWithGemini({ imageBuffer, mimeType, textInput, 
     const cleanedText = candidateText.replace(/```json\s*/gi, '').replace(/```\s*$/gi, '').trim();
     const parsed = JSON.parse(cleanedText);
 
+    const isZeroCalorie = /無糖|0卡|零卡|水|烏龍茶|綠茶|紅茶|青茶|黑咖啡|茶/i.test(parsed.food_name || textInput || '') &&
+      /無糖|0卡|零卡|水|黑咖啡|美式/i.test(parsed.food_name || textInput || '');
+
+    const parsedCal = Number(parsed.calories);
+    const finalCal = !isNaN(parsedCal) ? Math.round(parsedCal) : (isZeroCalorie ? 0 : 450);
+
+    const parsedP = Number(parsed.macros?.protein_g);
+    const parsedC = Number(parsed.macros?.carbs_g);
+    const parsedF = Number(parsed.macros?.fat_g);
+    const parsedFib = Number(parsed.macros?.fiber_g);
+
     return {
       isMock: false,
       food_name: parsed.food_name || '辨識餐點',
       estimated_weight_g: Number(parsed.estimated_weight_g) || 300,
-      calories: Math.round(Number(parsed.calories) || 450),
+      calories: finalCal,
       macros: {
-        protein_g: Math.round(Number(parsed.macros?.protein_g) || 20),
-        carbs_g: Math.round(Number(parsed.macros?.carbs_g) || 50),
-        fat_g: Math.round(Number(parsed.macros?.fat_g) || 15),
-        fiber_g: Math.round(Number(parsed.macros?.fiber_g) || 3)
+        protein_g: !isNaN(parsedP) ? Math.round(parsedP) : (isZeroCalorie ? 0 : 20),
+        carbs_g: !isNaN(parsedC) ? Math.round(parsedC) : (isZeroCalorie ? 0 : 50),
+        fat_g: !isNaN(parsedF) ? Math.round(parsedF) : (isZeroCalorie ? 0 : 15),
+        fiber_g: !isNaN(parsedFib) ? Math.round(parsedFib) : (isZeroCalorie ? 0 : 3)
       },
       ingredients: parsed.ingredients || [],
       confidence_note: parsed.confidence_note || 'Gemini 3.8 Flash 智慧分析完成'
@@ -142,6 +156,29 @@ function generateSimulatedNutrition(foodInput) {
   // Extract explicit weight if provided by user (e.g. 63g, 150克, 200ml)
   const weightMatch = cleanInput.match(/(\d+(?:\.\d+)?)\s*(?:g|克|ml|毫升|公克)/i);
   const userWeight = weightMatch ? parseFloat(weightMatch[1]) : null;
+
+  // 1. 檢查是否為無糖/零卡飲品（無糖茶、黑咖啡、美式、水等）
+  const isZeroCalBeverage = /(?:無糖|零卡|0卡)/i.test(cleanInput) ||
+    /黑咖啡|美式咖啡|美式/i.test(cleanInput) ||
+    /^(?:水|白開水|礦泉水|純水|氣泡水)$/i.test(cleanInput);
+
+  if (isZeroCalBeverage) {
+    const weight = userWeight || 600;
+    return {
+      isMock: true,
+      food_name: cleanInput || '無糖茶/飲品',
+      estimated_weight_g: weight,
+      calories: 0,
+      macros: {
+        protein_g: 0,
+        carbs_g: 0,
+        fat_g: 0,
+        fiber_g: 0
+      },
+      ingredients: [{ name: cleanInput, weight_g: weight, calories: 0 }],
+      confidence_note: '【示範模式】無糖茶飲/黑咖啡/水不含熱量與三大營養素 (0 kcal)。'
+    };
+  }
 
   const isSnack = /餅|捲心餅|洋芋片|零食|點心|泡芙|巧克力|餅乾|糖果|蛋糕/i.test(cleanInput);
   const isFruit = /香蕉|蘋果|芭樂|水果|橘子|西瓜/i.test(cleanInput);
@@ -188,14 +225,14 @@ function generateSimulatedNutrition(foodInput) {
     const cals = Math.round(weight * 0.38);
     return {
       isMock: true,
-      food_name: cleanInput || '無糖飲品',
+      food_name: cleanInput || '飲品',
       estimated_weight_g: weight,
       calories: cals,
       macros: {
         protein_g: Math.round(weight * 0.038 * 10) / 10,
         carbs_g: Math.round(weight * 0.02 * 10) / 10,
         fat_g: Math.round(weight * 0.015 * 10) / 10,
-        fiber_g: 4
+        fiber_g: 0
       },
       ingredients: [{ name: cleanInput, weight_g: weight, calories: cals }],
       confidence_note: '【示範模式】飲品依份量估算。'
