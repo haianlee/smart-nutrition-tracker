@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Camera,
   Image as ImageIcon,
@@ -13,7 +13,8 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
-  RotateCcw
+  RotateCcw,
+  History
 } from 'lucide-react';
 import { getLocalDateStr, getLocalTimeStr, stepDateStr } from '../utils/dateUtils';
 
@@ -38,6 +39,41 @@ export default function FoodCapture({
   const [editMode, setEditMode] = useState(false);
   const [editForm, setEditForm] = useState(null);
   const [statusMsg, setStatusMsg] = useState('');
+
+  // Auto-complete & Memory suggestions
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const suggestionBoxRef = useRef(null);
+
+  // Fetch suggestions when textInput changes or focused
+  useEffect(() => {
+    let active = true;
+    const fetchSuggestions = async () => {
+      try {
+        const res = await fetch(`/api/food-suggestions?q=${encodeURIComponent(textInput.trim())}&limit=6`);
+        if (res.ok && active) {
+          const data = await res.json();
+          setSuggestions(data || []);
+        }
+      } catch (e) {
+        // silently fallback
+      }
+    };
+
+    fetchSuggestions();
+    return () => { active = false; };
+  }, [textInput]);
+
+  // Click outside to close suggestion dropdown
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (suggestionBoxRef.current && !suggestionBoxRef.current.contains(e.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Editing existing past meal modal
   const [editingMeal, setEditingMeal] = useState(null);
@@ -445,19 +481,88 @@ export default function FoodCapture({
           </div>
         </div>
 
-        {/* Text Input / Override info */}
-        <div className="space-y-2 mb-4">
+        {/* Text Input / Override info with Auto-complete Memory */}
+        <div className="space-y-2 mb-4 relative" ref={suggestionBoxRef}>
           <label className="text-xs font-medium text-slate-500 flex items-center justify-between">
-            <span>文字補充或直接輸入食物：</span>
+            <span className="flex items-center gap-1">
+              <span>文字補充或直接輸入食物：</span>
+              {suggestions.length > 0 && (
+                <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-medium flex items-center gap-0.5">
+                  <History size={11} /> 記住歷史
+                </span>
+              )}
+            </span>
             <span className="text-[11px] text-slate-400">可指定重量或品牌</span>
           </label>
           <input
             type="text"
             value={textInput}
-            onChange={(e) => setTextInput(e.target.value)}
+            onChange={(e) => {
+              setTextInput(e.target.value);
+              setShowSuggestions(true);
+            }}
+            onFocus={() => setShowSuggestions(true)}
             placeholder="例：孔雀捲心餅63g、熟香蕉150g、牛肉麵半碗"
             className="w-full text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50/50"
           />
+
+          {/* Memory Auto-complete Dropdown */}
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="absolute left-0 right-0 top-full mt-1 bg-white rounded-2xl shadow-xl border border-slate-200 z-30 overflow-hidden animate-fadeIn">
+              <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-[11px] text-slate-400 font-medium">
+                <span className="flex items-center gap-1 text-slate-500">
+                  <History size={12} className="text-emerald-500" />
+                  曾經記錄過的食物 (點選帶入)：
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowSuggestions(false)}
+                  className="text-slate-400 hover:text-slate-600 p-0.5"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+
+              <div className="max-h-56 overflow-y-auto divide-y divide-slate-100">
+                {suggestions.map((item, idx) => (
+                  <button
+                    key={`${item.foodName}-${idx}`}
+                    type="button"
+                    onClick={() => {
+                      setTextInput(item.foodName);
+                      if (item.mealType) setMealType(item.mealType);
+                      setShowSuggestions(false);
+                    }}
+                    className="w-full text-left px-3.5 py-2.5 hover:bg-emerald-50/50 transition flex items-center justify-between group"
+                  >
+                    <div>
+                      <div className="text-xs font-semibold text-slate-800 group-hover:text-emerald-700 flex items-center gap-1.5">
+                        <span>{item.foodName}</span>
+                        {item.estimatedWeightG > 0 && (
+                          <span className="text-[10px] text-slate-400 font-normal">
+                            ({item.estimatedWeightG}g)
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        P:{item.macros?.proteinG || 0}g / C:{item.macros?.carbsG || 0}g / F:{item.macros?.fatG || 0}g
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs font-bold text-amber-500 block">
+                        {item.calories} <span className="text-[9px] font-normal text-slate-400">kcal</span>
+                      </span>
+                      {item.count > 1 && (
+                        <span className="text-[9px] text-slate-400 bg-slate-100 px-1 py-0.2 rounded">
+                          已吃過 {item.count} 次
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Analyze Button */}

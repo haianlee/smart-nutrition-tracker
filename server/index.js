@@ -134,6 +134,18 @@ app.delete('/api/meals/:id', (req, res) => {
   }
 });
 
+// 2.1 Food Auto-complete & Memory suggestions
+app.get('/api/food-suggestions', (req, res) => {
+  try {
+    const q = req.query.q || '';
+    const limit = parseInt(req.query.limit, 10) || 8;
+    const suggestions = db.getFoodSuggestions(q, limit);
+    res.json(suggestions);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 3. Weight Records CRUD
 app.get('/api/weights', (req, res) => {
   try {

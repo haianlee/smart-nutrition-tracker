@@ -559,7 +559,7 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
                     </ol>
 
                     <div className="relative">
-                      <pre className="bg-slate-900 text-slate-100 p-2.5 rounded-lg text-[10px] overflow-x-auto font-mono max-h-32">
+                      <pre className="bg-slate-900 text-slate-100 p-2.5 rounded-lg text-[10px] overflow-x-auto font-mono max-h-36">
 {`function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
@@ -576,12 +576,21 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
     return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+// 首次設定請在編輯器上方選 testAuth 點執行以完成 Google 授權
+function testAuth() {
+  MailApp.sendEmail({
+    to: Session.getActiveUser().getEmail(),
+    subject: "測試授權成功",
+    body: "您的 Google Apps Script 郵件轉寄權限已啟用！"
+  });
 }`}
                       </pre>
                       <button
                         type="button"
                         onClick={() => {
-                          const script = `function doPost(e) {\n  try {\n    var data = JSON.parse(e.postData.contents);\n    var recipient = data.recipient || Session.getActiveUser().getEmail();\n    var subject = data.subject || "【每日健康結報】";\n    MailApp.sendEmail({\n      to: recipient,\n      subject: subject,\n      htmlBody: data.htmlBody\n    });\n    return ContentService.createTextOutput(JSON.stringify({ status: "success" }))\n      .setMimeType(ContentService.MimeType.JSON);\n  } catch (err) {\n    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))\n      .setMimeType(ContentService.MimeType.JSON);\n  }\n}`;
+                          const script = `function doPost(e) {\n  try {\n    var data = JSON.parse(e.postData.contents);\n    var recipient = data.recipient || Session.getActiveUser().getEmail();\n    var subject = data.subject || "【每日健康結報】";\n    MailApp.sendEmail({\n      to: recipient,\n      subject: subject,\n      htmlBody: data.htmlBody\n    });\n    return ContentService.createTextOutput(JSON.stringify({ status: "success" }))\n      .setMimeType(ContentService.MimeType.JSON);\n  } catch (err) {\n    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))\n      .setMimeType(ContentService.MimeType.JSON);\n  }\n}\n\nfunction testAuth() {\n  MailApp.sendEmail({\n    to: Session.getActiveUser().getEmail(),\n    subject: "測試授權成功",\n    body: "您的 Google Apps Script 郵件轉寄權限已啟用！"\n  });\n}`;
                           navigator.clipboard.writeText(script);
                           setCopiedGasScript(true);
                           setTimeout(() => setCopiedGasScript(false), 2000);
@@ -593,10 +602,11 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
                       </button>
                     </div>
 
-                    <ol start="3" className="list-decimal list-inside space-y-1 text-slate-700">
-                      <li>點選右上角「部署」➔「新增部署作業」。</li>
-                      <li>種類選擇「網頁應用程式」，並將<strong>「誰可以存取」設為「所有人 (Anyone)」</strong>。</li>
-                      <li>點擊「部署」並授權，複製產生的「網頁應用程式網址」貼到上方欄位即可！</li>
+                    <ol start="3" className="list-decimal list-inside space-y-1.5 text-slate-700">
+                      <li>上方函式選單選 <strong>testAuth</strong> 點「執行」，彈出視窗請點「審查權限 ➔ 進階 ➔ 前往（允許）」。</li>
+                      <li>點右上角「部署」➔「新增部署作業」➔ 種類選「網頁應用程式」。</li>
+                      <li><strong>「誰可以存取」請務必選「所有人 (Anyone)」</strong>。</li>
+                      <li>點擊「部署」，複製「網頁應用程式網址」貼到上方欄位即可！</li>
                     </ol>
                   </div>
                 )}

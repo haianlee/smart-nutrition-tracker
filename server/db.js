@@ -195,6 +195,53 @@ export const db = {
     return false;
   },
 
+  // Auto-complete suggestions for previously entered or recognized foods
+  getFoodSuggestions(query = '', limit = 8) {
+    const data = readDb();
+    const cleanQuery = (query || '').trim().toLowerCase();
+    
+    // Group meals by foodName, keeping the most recent entry and frequency
+    const map = new Map();
+    for (const m of data.meals) {
+      const name = (m.foodName || '').trim();
+      if (!name) continue;
+      if (!map.has(name)) {
+        map.set(name, {
+          foodName: name,
+          estimatedWeightG: m.estimatedWeightG,
+          calories: m.calories,
+          macros: m.macros,
+          mealType: m.mealType,
+          ingredients: m.ingredients,
+          confidenceNote: m.confidenceNote,
+          count: 1,
+          lastUsed: m.createdAt || m.date
+        });
+      } else {
+        const item = map.get(name);
+        item.count += 1;
+        if ((m.createdAt || m.date) > item.lastUsed) {
+          item.estimatedWeightG = m.estimatedWeightG;
+          item.calories = m.calories;
+          item.macros = m.macros;
+          item.mealType = m.mealType;
+          item.ingredients = m.ingredients;
+          item.lastUsed = m.createdAt || m.date;
+        }
+      }
+    }
+
+    let list = Array.from(map.values());
+    if (cleanQuery) {
+      list = list.filter(item => item.foodName.toLowerCase().includes(cleanQuery));
+    }
+
+    // Sort by count (frequency) descending, then lastUsed
+    list.sort((a, b) => b.count - a.count || b.lastUsed.localeCompare(a.lastUsed));
+
+    return list.slice(0, limit);
+  },
+
   // --- WEIGHTS ---
   getWeights(filters = {}) {
     const data = readDb();

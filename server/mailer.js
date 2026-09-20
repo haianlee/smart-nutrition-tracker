@@ -242,13 +242,18 @@ export async function sendDailyDigest(dateStr = null) {
   const subject = `【每日健康結報】${summary.date} 攝取 ${summary.totalCalories} kcal (${summary.deficit >= 0 ? '赤字 ' + summary.deficit : '盈餘 +' + Math.abs(summary.deficit)} kcal)`;
 
   // ==========================================
-  // 1. 方案 B: Google Apps Script Webhook (免網域寄發 Gmail)
+  // 1. 方案 B: Google Apps Script Webhook (免網域寄發 Gmail，優先第一管道)
   // ==========================================
   if (notif.gasWebhookUrl && notif.gasWebhookUrl.trim().startsWith('http')) {
     try {
+      const gasController = new AbortController();
+      const gasTimer = setTimeout(() => gasController.abort(), 20000); // 20s timeout
+
       const gasRes = await fetch(notif.gasWebhookUrl.trim(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        redirect: 'follow', // Crucial for Google Apps Script 302 redirects!
+        signal: gasController.signal,
         body: JSON.stringify({
           recipient: recipient || undefined,
           subject,
@@ -256,19 +261,24 @@ export async function sendDailyDigest(dateStr = null) {
           textBody: textSummary
         })
       });
+      clearTimeout(gasTimer);
 
       const gasText = await gasRes.text();
       let gasData = {};
       try { gasData = JSON.parse(gasText); } catch (e) { gasData = { raw: gasText }; }
 
-      if (gasRes.ok && (gasData.status === 'success' || !gasData.status)) {
+      if (gasRes.ok && (gasData.status === 'success' || !gasData.status || gasText.includes('success'))) {
         results.push({ provider: 'gas', message: '已透過 Google Apps Script (Gmail) 成功寄出結報！' });
       } else {
         throw new Error(gasData.message || gasText || 'Google Apps Script 回應異常');
       }
     } catch (err) {
       console.error('GAS send error:', err);
-      errors.push(`Google Apps Script 失敗: ${err.message}`);
+      if (err.name === 'AbortError') {
+        errors.push('Google Apps Script 發送超時 (超過 20 秒)');
+      } else {
+        errors.push(`Google Apps Script 失敗: ${err.message}`);
+      }
     }
   }
 

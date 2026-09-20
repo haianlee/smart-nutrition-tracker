@@ -117,7 +117,7 @@ export default function ReportsView({ currentDate, onDataChanged }) {
     setStatusMsg('');
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s client timeout
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s client timeout to accommodate Google Apps Script cold starts
 
       const res = await fetch('/api/send-report', {
         method: 'POST',
