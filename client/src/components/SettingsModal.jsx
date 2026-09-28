@@ -451,13 +451,13 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
                 <label className="text-xs font-medium text-slate-500 block mb-1">Gemini API Key</label>
                 <input
                   type="password"
-                  placeholder="AIzaSy..."
+                  placeholder="AIzaSy... 或 AQ...."
                   value={settings.geminiApiKey}
                   onChange={(e) => setSettings({ ...settings, geminiApiKey: e.target.value })}
                   className="w-full text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 focus:outline-none focus:border-emerald-500 font-mono"
                 />
                 <span className="text-[11px] text-slate-400 mt-1 block">
-                  可在 Google AI Studio 免費取得 API Key。
+                  支援 Google AI Studio (AIzaSy 開頭) 或 Google Developer (AQ 開頭) 密鑰。
                 </span>
               </div>
 

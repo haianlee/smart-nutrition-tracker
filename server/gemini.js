@@ -91,11 +91,11 @@ export async function analyzeFoodWithGemini({ imageBuffer, mimeType, textInput, 
 
   // Robust multi-model failover pool (handles 503 high demand, 429 quota, model unavailability)
   const candidateModels = [
+    'gemini-3.6-flash',
     selectedModel,
-    'gemini-2.5-flash',
+    'gemini-3.8-flash',
     'gemini-flash-lite-latest',
-    'gemini-3.5-flash-lite',
-    'gemini-3.6-flash'
+    'gemini-3.5-flash-lite'
   ];
   // Remove duplicates while preserving order
   const modelsToTry = [...new Set(candidateModels)];
@@ -445,11 +445,11 @@ ${mealsDescription}
   };
 
   const candidateAdvisorModels = [
+    'gemini-3.6-flash',
     selectedModel,
-    'gemini-2.5-flash',
+    'gemini-3.8-flash',
     'gemini-flash-lite-latest',
-    'gemini-3.5-flash-lite',
-    'gemini-3.6-flash'
+    'gemini-3.5-flash-lite'
   ];
   const advisorModelsToTry = [...new Set(candidateAdvisorModels)];
 
