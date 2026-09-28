@@ -84,8 +84,9 @@ export async function analyzeFoodWithGemini({ imageBuffer, mimeType, textInput, 
     },
     generationConfig: {
       temperature: 0.1,
-      maxOutputTokens: 1000, // Increased from 350 to prevent truncated JSON ("Unterminated string in JSON")
-      responseMimeType: "application/json"
+      maxOutputTokens: 600,
+      responseMimeType: "application/json",
+      thinkingConfig: { thinkingBudget: 0 } // Disable thinking to achieve sub-second response times
     }
   };
 
@@ -97,8 +98,9 @@ export async function analyzeFoodWithGemini({ imageBuffer, mimeType, textInput, 
     'gemini-flash-lite-latest',
     'gemini-3.5-flash-lite'
   ];
-  // Remove duplicates while preserving order
-  const modelsToTry = [...new Set(candidateModels)];
+  // For text-only lookup, try at most 2 models with fast timeout to prevent waiting 30 seconds
+  const maxModels = imageBuffer ? 3 : 2;
+  const modelsToTry = [...new Set(candidateModels)].slice(0, maxModels);
 
   let candidateText = null;
   let lastError = null;
@@ -109,7 +111,8 @@ export async function analyzeFoodWithGemini({ imageBuffer, mimeType, textInput, 
       const res = await fetch(currentEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(3500) // Fast 3.5s timeout per model to prevent hanging
       });
 
       if (!res.ok) {

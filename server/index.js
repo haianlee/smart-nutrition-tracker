@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 
 import { db, getSystemDateStr } from './db.js';
 import { analyzeFoodWithGemini, generateDailyDietAdvice } from './gemini.js';
+import { fastLookupFood } from './nutritionDb.js';
 import { sendDailyDigest, buildDailyReportHtml } from './mailer.js';
 import { initScheduler } from './scheduler.js';
 
@@ -71,6 +72,19 @@ app.post('/api/analyze-food', upload.single('image'), async (req, res) => {
 
     if (!imageBuffer && !textInput.trim()) {
       return res.status(400).json({ error: '請提供食物照片或輸入食物名稱/重量' });
+    }
+
+    // ⚡ 0.01秒極速本地查表（純文字時優先比對個人歷史記錄與台灣常見食品庫，避免 AI 尖峰塞車）
+    if (!imageBuffer && textInput.trim()) {
+      const allMeals = db.getMeals();
+      const fastResult = fastLookupFood(textInput.trim(), allMeals);
+      if (fastResult) {
+        return res.json({
+          success: true,
+          imageUrl: '',
+          analysis: fastResult
+        });
+      }
     }
 
     const settings = db.getSettings();

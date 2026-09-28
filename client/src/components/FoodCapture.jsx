@@ -197,6 +197,99 @@ export default function FoodCapture({
     }
   };
 
+  // ⚡ 直接存入今日紀錄 (免等 AI 計算，0 秒即時存入)
+  const handleDirectSaveFromHistory = async (item) => {
+    try {
+      const payload = {
+        date: selectedDate || todayStr,
+        time: nowTime,
+        mealType: mealType || item.mealType || 'lunch',
+        foodName: item.foodName,
+        estimatedWeightG: Number(item.estimatedWeightG) || 100,
+        calories: Number(item.calories) || 0,
+        macros: {
+          proteinG: Number(item.macros?.proteinG) || 0,
+          carbsG: Number(item.macros?.carbsG) || 0,
+          fatG: Number(item.macros?.fatG) || 0,
+          fiberG: Number(item.macros?.fiberG) || 0
+        },
+        ingredients: item.ingredients || [],
+        confidenceNote: item.confidenceNote || '歷史紀錄快速存入',
+        imageUrl: item.imageUrl || ''
+      };
+
+      const res = await fetch('/api/meals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) throw new Error('儲存失敗');
+
+      const saved = await res.json();
+      onMealAdded(saved);
+      setTextInput('');
+      setShowSuggestions(false);
+      setStatusMsg(`⚡ 已秒級存入今日紀錄：${payload.foodName} (${payload.calories} kcal)！`);
+      setTimeout(() => setStatusMsg(''), 4000);
+    } catch (err) {
+      setStatusMsg(`存入失敗: ${err.message}`);
+    }
+  };
+
+  // ✏️ 快速載入至微調面板 (免等 AI 計算，0 秒即時調整克數)
+  const handleLoadFromHistoryToEdit = (item) => {
+    const baseW = Number(item.estimatedWeightG) || 100;
+    const baseCal = Number(item.calories) || 0;
+    const baseP = Number(item.macros?.proteinG) || 0;
+    const baseC = Number(item.macros?.carbsG) || 0;
+    const baseF = Number(item.macros?.fatG) || 0;
+    const baseFib = Number(item.macros?.fiberG) || 0;
+
+    setAnalysisResult({
+      food_name: item.foodName,
+      estimated_weight_g: baseW,
+      calories: baseCal,
+      macros: {
+        protein_g: baseP,
+        carbs_g: baseC,
+        fat_g: baseF,
+        fiber_g: baseFib
+      },
+      ingredients: item.ingredients || [],
+      confidence_note: '歷史紀錄快速帶入（免等 AI 計算，可直接微調）',
+      isMock: false
+    });
+
+    setEditForm({
+      date: selectedDate || todayStr,
+      time: nowTime,
+      mealType: mealType || item.mealType || 'lunch',
+      foodName: item.foodName,
+      estimatedWeightG: baseW,
+      calories: baseCal,
+      proteinG: baseP,
+      carbsG: baseC,
+      fatG: baseF,
+      fiberG: baseFib,
+      confidenceNote: '歷史紀錄快速帶入',
+      ingredients: item.ingredients || [],
+      baseWeightG: baseW,
+      baseCalories: baseCal,
+      baseProteinG: baseP,
+      baseCarbsG: baseC,
+      baseFatG: baseF,
+      baseFiberG: baseFib,
+      baseIngredients: item.ingredients || []
+    });
+
+    setTextInput(item.foodName);
+    setShowSuggestions(false);
+    setEditMode(true);
+    setStatusMsg(`⚡ 已秒級載入 ${item.foodName}，可微調克數或直接按確認！`);
+    setTimeout(() => setStatusMsg(''), 3000);
+  };
+
   const handleSaveMeal = async () => {
     if (!editForm) return;
 
@@ -509,56 +602,81 @@ export default function FoodCapture({
           {/* Memory Auto-complete Dropdown */}
           {showSuggestions && suggestions.length > 0 && (
             <div className="absolute left-0 right-0 top-full mt-1 bg-white rounded-2xl shadow-xl border border-slate-200 z-30 overflow-hidden animate-fadeIn">
-              <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-[11px] text-slate-400 font-medium">
-                <span className="flex items-center gap-1 text-slate-500">
-                  <History size={12} className="text-emerald-500" />
-                  曾經記錄過的食物 (點選帶入)：
+              <div className="px-3 py-2 bg-emerald-50/70 border-b border-emerald-100 flex items-center justify-between text-[11px] font-medium">
+                <span className="flex items-center gap-1.5 text-emerald-800 font-semibold">
+                  <History size={13} className="text-emerald-600" />
+                  歷史食物（點擊 ⚡ 直接存入今日，免等 AI）：
                 </span>
                 <button
                   type="button"
                   onClick={() => setShowSuggestions(false)}
-                  className="text-slate-400 hover:text-slate-600 p-0.5"
+                  className="text-slate-400 hover:text-slate-600 p-0.5 rounded"
                 >
                   <X size={13} />
                 </button>
               </div>
 
-              <div className="max-h-56 overflow-y-auto divide-y divide-slate-100">
+              <div className="max-h-64 overflow-y-auto divide-y divide-slate-100">
                 {suggestions.map((item, idx) => (
-                  <button
+                  <div
                     key={`${item.foodName}-${idx}`}
-                    type="button"
-                    onClick={() => {
-                      setTextInput(item.foodName);
-                      if (item.mealType) setMealType(item.mealType);
-                      setShowSuggestions(false);
-                    }}
-                    className="w-full text-left px-3.5 py-2.5 hover:bg-emerald-50/50 transition flex items-center justify-between group"
+                    className="w-full px-3.5 py-2.5 hover:bg-emerald-50/40 transition flex items-center justify-between gap-2 group"
                   >
-                    <div>
+                    {/* Left: Food Info (Click to directly save to today) */}
+                    <div
+                      onClick={() => handleDirectSaveFromHistory(item)}
+                      className="flex-1 cursor-pointer min-w-0"
+                      title="點擊直接存入今日紀錄"
+                    >
                       <div className="text-xs font-semibold text-slate-800 group-hover:text-emerald-700 flex items-center gap-1.5">
-                        <span>{item.foodName}</span>
+                        <span className="truncate">{item.foodName}</span>
                         {item.estimatedWeightG > 0 && (
-                          <span className="text-[10px] text-slate-400 font-normal">
+                          <span className="text-[10px] text-slate-400 font-normal shrink-0">
                             ({item.estimatedWeightG}g)
                           </span>
                         )}
+                        {item.count > 1 && (
+                          <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-100 px-1 py-0.2 rounded shrink-0">
+                            吃過 {item.count} 次
+                          </span>
+                        )}
                       </div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">
-                        P:{item.macros?.proteinG || 0}g / C:{item.macros?.carbsG || 0}g / F:{item.macros?.fatG || 0}g
+                      <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-2">
+                        <span className="font-semibold text-amber-600">{item.calories} kcal</span>
+                        <span>•</span>
+                        <span>P:{item.macros?.proteinG || 0}g C:{item.macros?.carbsG || 0}g F:{item.macros?.fatG || 0}g</span>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <span className="text-xs font-bold text-amber-500 block">
-                        {item.calories} <span className="text-[9px] font-normal text-slate-400">kcal</span>
-                      </span>
-                      {item.count > 1 && (
-                        <span className="text-[9px] text-slate-400 bg-slate-100 px-1 py-0.2 rounded">
-                          已吃過 {item.count} 次
-                        </span>
-                      )}
+
+                    {/* Right: Action Buttons */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleLoadFromHistoryToEdit(item);
+                        }}
+                        title="帶入並微調份量/餐別 (免等 AI)"
+                        className="px-2 py-1 text-[11px] font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 active:scale-95 rounded-lg transition flex items-center gap-1"
+                      >
+                        <Edit3 size={11} />
+                        微調
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDirectSaveFromHistory(item);
+                        }}
+                        title="直接存入今日紀錄 (免等 AI)"
+                        className="px-2.5 py-1 text-[11px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 rounded-lg shadow-sm shadow-emerald-500/20 transition flex items-center gap-1"
+                      >
+                        <Sparkles size={11} />
+                        直接存入
+                      </button>
                     </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             </div>
