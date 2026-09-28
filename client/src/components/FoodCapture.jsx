@@ -613,8 +613,10 @@ export default function FoodCapture({
             <div className="mb-3 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-2">
               <AlertCircle size={15} className="shrink-0 mt-0.5 text-amber-600" />
               <div>
-                <strong>目前處於離線示範模式：</strong>
-                尚未填寫 Gemini API Key，數據為離線估算。若要啟用真正的 <strong>Gemini 智慧聯網檢索</strong>，請點擊右上角 <strong>⚙️ 設定</strong> 填入 API Key！
+                <strong>目前處於離線備援/示範模式：</strong>
+                {analysisResult.confidence_note?.includes('503') 
+                  ? analysisResult.confidence_note
+                  : '未偵測到有效 Gemini API Key，或雲端連線失敗，目前採用離線演算法估算。請檢查右上角 ⚙️ 設定 中的 API Key 是否正確啟用！'}
               </div>
             </div>
           )}

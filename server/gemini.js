@@ -16,6 +16,7 @@ const SYSTEM_PROMPT = `
 
 【重要輸出規則】
 - 必須「只輸出標準 JSON」，不要包含任何額外的 Markdown 標記（例如不要包裹 \`\`\`json ），確保可被直接 JSON.parse()。
+- 【營養標示表格辨識重要規範】：若照片拍攝的是食品/包裝背面的「營養標示 (Nutrition Facts)」表格，請優先精準辨識表格內印製的數值！辨識「每份」或「整包/整瓶」的總熱量(大卡)、蛋白質(g)、碳水化合物(g)、脂肪(g)、糖(g)與公克數(g)，切勿隨意概算！
 - 【零熱量/低熱量特別規則】：水、無糖茶（無糖綠茶、無糖烏龍茶、無糖紅茶、無糖青茶、麥茶、普洱茶等）、黑咖啡、零卡可樂/氣泡水、代糖飲品等，其總熱量 (calories)、蛋白質 (protein_g)、碳水化合物 (carbs_g)、脂肪 (fat_g) 必須嚴格標示為 0（或接近0的真實數值），絕對不可誤估為有糖飲料或高熱量食物！
 - 請嚴格遵循此格式：
 {
@@ -43,7 +44,9 @@ export async function analyzeFoodWithGemini({ imageBuffer, mimeType, textInput, 
   if (!effectiveKey) {
     // Return friendly simulated fallback if API key is not configured yet
     console.warn('GEMINI_API_KEY is not configured. Providing realistic simulated nutrition analysis.');
-    return generateSimulatedNutrition(textInput || '上傳食物照');
+    const sim = generateSimulatedNutrition(textInput || '食物');
+    sim.confidence_note = '尚未填寫 Gemini API Key，數據為離線估算。若要啟用真正的 Gemini 智慧連網辨識，請點擊右上角 ⚙️ 設定 填入 API Key！';
+    return sim;
   }
 
   // Choose high-speed model: gemini-flash-lite-latest or gemini-3.5-flash-lite
@@ -66,9 +69,10 @@ export async function analyzeFoodWithGemini({ imageBuffer, mimeType, textInput, 
   const promptText = textInput 
     ? `使用者輸入食物品名或份量說明：「${textInput}」。
 【特別規範】
-1. 若使用者輸入包含具體商品名稱（例如特定品牌包裝食品）或明確重量（例如「孔雀捲心餅 63g」），請嚴格鎖定該指定品項與明確克數，推估或檢索其真實包裝營養標示，切勿覆寫或忽視使用者的克數！
-2. 若為「無糖茶」（如無糖烏龍茶、無糖綠茶、無糖紅茶、麥茶、四季春等）、「水」、「黑咖啡」或標明「無糖/零卡/0卡」之飲品，總熱量 calories 必須為 0 kcal，蛋白質、碳水化合物、脂肪皆為 0g！`
-    : `請分析照片中的食物營養素與熱量。若為無糖茶水或黑咖啡等無熱量飲品，請準確評估熱量為 0 kcal。`;
+1. 若照片是食品包裝或「營養標示表」，請直接精準辨識讀取照片中的熱量 (大卡)、蛋白質、脂肪、碳水化合物數值！
+2. 若使用者輸入包含具體商品名稱（例如特定品牌包裝食品）或明確重量（例如「孔雀捲心餅 63g」），請嚴格鎖定該指定品項與明確克數，推估或檢索其真實包裝營養標示，切勿覆寫或忽視使用者的克數！
+3. 若為「無糖茶」（如無糖烏龍茶、無糖綠茶、無糖紅茶、麥茶、四季春等）、「水」、「黑咖啡」或標明「無糖/零卡/0卡」之飲品，總熱量 calories 必須為 0 kcal，蛋白質、碳水化合物、脂肪皆為 0g！`
+    : `請仔細分析照片中的食物或食品包裝。若照片中包含「營養標示」表格（包含熱量、蛋白質、脂肪、碳水化合物），請務必優先精確讀取表格中的數值填入！若為無糖茶水或黑咖啡等無熱量飲品，請準確評估熱量為 0 kcal。`;
 
   parts.push({ text: promptText });
   contents.push({ parts });
@@ -127,11 +131,23 @@ export async function analyzeFoodWithGemini({ imageBuffer, mimeType, textInput, 
     }
   }
 
-  // If all models in the pool failed (e.g. 503 high demand on all, or network issues), gracefully fallback to simulated nutrition
+  // If all models in the pool failed (e.g. 503 high demand on all, invalid key, or network issues), gracefully fallback
   if (!candidateText) {
-    console.warn('All Gemini models experienced high demand (503/busy). Gracefully falling back to high-accuracy simulated nutrition.');
+    console.warn('All Gemini models failed or experienced high demand. Gracefully falling back to nutrition estimate.', lastError?.message);
     const fallback = generateSimulatedNutrition(textInput || '食物');
-    fallback.confidence_note = '【提示】Google 伺服器目前尖峰忙碌 (503 High Demand)，系統已自動啟用高精準度營養估算備援，不影響您的記錄！';
+    const isApiKeyError = lastError?.message && (
+      lastError.message.includes('API_KEY_INVALID') ||
+      lastError.message.includes('API key not valid') ||
+      lastError.message.includes('[400]') ||
+      lastError.message.includes('[403]') ||
+      lastError.message.includes('UNAUTHENTICATED')
+    );
+
+    if (isApiKeyError) {
+      fallback.confidence_note = '【API Key 異常】Gemini API Key 無效或未授權（Google AI Studio 密鑰通常以 AIzaSy 開頭）。請點擊右上角 ⚙️ 設定 檢查填入的 API Key！';
+    } else {
+      fallback.confidence_note = '【提示】Google 伺服器目前尖峰忙碌 (503 High Demand)，系統已自動啟用高精準度營養估算備援，不影響您的記錄！';
+    }
     return fallback;
   }
 
