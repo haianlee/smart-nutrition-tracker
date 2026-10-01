@@ -49,8 +49,8 @@ export async function analyzeFoodWithGemini({ imageBuffer, mimeType, textInput, 
     return sim;
   }
 
-  // Choose high-speed model: gemini-flash-lite-latest or gemini-3.5-flash-lite
-  const selectedModel = model === 'gemini-3.8-flash' ? 'gemini-flash-lite-latest' : model;
+  // Map overloaded gemini-3.8-flash to reliable gemini-3.6-flash or gemini-3.1-flash-lite
+  const selectedModel = (model === 'gemini-3.8-flash' || !model) ? 'gemini-3.6-flash' : model;
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${effectiveKey}`;
 
   const contents = [];
@@ -91,16 +91,18 @@ export async function analyzeFoodWithGemini({ imageBuffer, mimeType, textInput, 
   };
 
   // Robust multi-model failover pool (handles 503 high demand, 429 quota, model unavailability)
+  // Prioritize active & stable models: 3.6-flash and 3.1-flash-lite, avoid 3.8-flash overload
   const candidateModels = [
     'gemini-3.6-flash',
+    'gemini-3.1-flash-lite',
     selectedModel,
-    'gemini-3.8-flash',
     'gemini-flash-lite-latest',
+    'gemini-3.5-flash',
     'gemini-3.5-flash-lite'
   ];
   // For text-only lookup, try at most 2 models with fast timeout to prevent waiting 30 seconds
   const maxModels = imageBuffer ? 3 : 2;
-  const modelsToTry = [...new Set(candidateModels)].slice(0, maxModels);
+  const modelsToTry = [...new Set(candidateModels.filter(m => m !== 'gemini-3.8-flash'))].slice(0, maxModels);
 
   let candidateText = null;
   let lastError = null;
@@ -443,18 +445,20 @@ ${mealsDescription}
     generationConfig: {
       temperature: 0.2,
       maxOutputTokens: 1200,
-      responseMimeType: "application/json"
+      responseMimeType: "application/json",
+      thinkingConfig: { thinkingBudget: 0 }
     }
   };
 
   const candidateAdvisorModels = [
     'gemini-3.6-flash',
+    'gemini-3.1-flash-lite',
     selectedModel,
-    'gemini-3.8-flash',
     'gemini-flash-lite-latest',
+    'gemini-3.5-flash',
     'gemini-3.5-flash-lite'
   ];
-  const advisorModelsToTry = [...new Set(candidateAdvisorModels)];
+  const advisorModelsToTry = [...new Set(candidateAdvisorModels.filter(m => m !== 'gemini-3.8-flash'))];
 
   let candidateText = null;
 
@@ -464,7 +468,8 @@ ${mealsDescription}
       const res = await fetch(currentEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(5000)
       });
 
       if (!res.ok) {

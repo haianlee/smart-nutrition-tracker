@@ -15,7 +15,7 @@ export default function Navbar({ onOpenSettings, todayWeight, todayCalories, tde
             <h1 className="text-base font-bold text-slate-800 leading-tight flex items-center gap-1.5">
               智慧飲食與體重管家
               <span className="text-[10px] uppercase font-semibold tracking-wider bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded border border-emerald-200">
-                Gemini 3.8 AI
+                Gemini 3.6 AI
               </span>
             </h1>
             <p className="text-xs text-slate-500">連續性數據追蹤與自動結報</p>

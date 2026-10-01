@@ -16,7 +16,7 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
       const cached = JSON.parse(localStorage.getItem('nt_settings') || '{}');
       return {
         geminiApiKey: localStorage.getItem('gemini_api_key') || cached.geminiApiKey || '',
-        geminiModel: cached.geminiModel || 'gemini-3.8-flash',
+        geminiModel: cached.geminiModel || 'gemini-3.6-flash',
         userProfile: {
           gender: 'male',
           age: 28,
@@ -55,7 +55,7 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
     } catch (e) {
       return {
         geminiApiKey: '',
-        geminiModel: 'gemini-3.8-flash',
+        geminiModel: 'gemini-3.6-flash',
         userProfile: { gender: 'male', age: 28, heightCm: 175, weightKg: 70, activityLevel: 'moderate' },
         tdee: 2200,
         targetCalories: 1900,
@@ -462,19 +462,19 @@ export default function SettingsModal({ isOpen, onClose, onSettingsUpdated }) {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-slate-500 block mb-1">使用模型 (速度優先)</label>
+                <label className="text-xs font-medium text-slate-500 block mb-1">使用模型 (穩定與速度優先)</label>
                 <select
                   value={settings.geminiModel}
                   onChange={(e) => setSettings({ ...settings, geminiModel: e.target.value })}
                   className="w-full text-sm px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:outline-none"
                 >
-                  <option value="gemini-flash-lite-latest">⚡ Gemini Flash-Lite Latest (最推薦・秒級極速回應 &lt;0.5秒)</option>
-                  <option value="gemini-3.5-flash-lite">⚡ Gemini 3.5 Flash-Lite (極速輕量)</option>
-                  <option value="gemini-3.6-flash">🚀 Gemini 3.6 Flash (深度分析平衡款)</option>
-                  <option value="gemini-3.8-flash">💎 Gemini 3.8 Flash (最新高階旗艦)</option>
+                  <option value="gemini-3.6-flash">🚀 Gemini 3.6 Flash (最推薦・連線穩定不塞車)</option>
+                  <option value="gemini-3.1-flash-lite">⚡ Gemini 3.1 Flash-Lite (極速輕量款)</option>
+                  <option value="gemini-flash-lite-latest">⚡ Gemini Flash-Lite Latest</option>
+                  <option value="gemini-3.5-flash">✨ Gemini 3.5 Flash</option>
                 </select>
                 <span className="text-[11px] text-emerald-600 font-medium mt-1 block">
-                  ⚡ 推薦選用 Flash-Lite：體積輕巧、回應時間小於 0.5 秒，精準度依然達 98%+！
+                  ⚡ 推薦選用 Gemini 3.6 Flash：穩定性最高，完美避開 3.8 尖峰過載！
                 </span>
               </div>
             </div>
