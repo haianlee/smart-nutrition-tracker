@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { COMMON_TAIWAN_FOODS } from './nutritionDb.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -233,11 +234,54 @@ export const db = {
 
     let list = Array.from(map.values());
     if (cleanQuery) {
-      list = list.filter(item => item.foodName.toLowerCase().includes(cleanQuery));
+      list = list.filter(item => {
+        const itemLower = item.foodName.toLowerCase();
+        // 單一字元（如「水」）必須嚴格精確吻合，避免「水」模糊包含「水餃」或「水餃」反向抓到「水」
+        if (cleanQuery.length === 1 || itemLower.length === 1) {
+          return itemLower === cleanQuery;
+        }
+        return itemLower.includes(cleanQuery) || cleanQuery.includes(itemLower);
+      });
     }
 
     // Sort by count (frequency) descending, then lastUsed
     list.sort((a, b) => b.count - a.count || b.lastUsed.localeCompare(a.lastUsed));
+
+    // 若歷史記錄不足，補充台灣常見飲食資料庫中的吻合項目 (如使用者打「水餃」即使歷史沒有也即時提供)
+    if (cleanQuery && list.length < limit) {
+      for (const item of COMMON_TAIWAN_FOODS) {
+        const matchedName = item.names.find(n => {
+          const lower = n.toLowerCase();
+          if (cleanQuery.length === 1 || lower.length === 1) {
+            return cleanQuery === lower;
+          }
+          return lower.includes(cleanQuery) || cleanQuery.includes(lower);
+        });
+
+        if (matchedName && !list.some(l => l.foodName.includes(matchedName) || matchedName.includes(l.foodName))) {
+          const cnt = item.defaultCount || 1;
+          const w = item.unitWeight * cnt;
+          const cal = item.calories * cnt;
+          list.push({
+            foodName: cnt > 1 ? `${matchedName} (${cnt}顆)` : matchedName,
+            estimatedWeightG: w,
+            calories: cal,
+            macros: {
+              proteinG: Math.round(item.p * cnt * 10) / 10,
+              carbsG: Math.round(item.c * cnt * 10) / 10,
+              fatG: Math.round(item.f * cnt * 10) / 10,
+              fiberG: Math.round(item.fib * cnt * 10) / 10
+            },
+            mealType: 'lunch',
+            ingredients: [{ name: matchedName, weight_g: w, calories: cal }],
+            confidenceNote: '台灣常用飲食資料庫推薦',
+            count: 0,
+            isCommonDb: true
+          });
+          if (list.length >= limit) break;
+        }
+      }
+    }
 
     return list.slice(0, limit);
   },

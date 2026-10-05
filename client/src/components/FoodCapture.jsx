@@ -605,7 +605,7 @@ export default function FoodCapture({
               <div className="px-3 py-2 bg-emerald-50/70 border-b border-emerald-100 flex items-center justify-between text-[11px] font-medium">
                 <span className="flex items-center gap-1.5 text-emerald-800 font-semibold">
                   <History size={13} className="text-emerald-600" />
-                  歷史食物（點擊 ⚡ 直接存入今日，免等 AI）：
+                  歷史與常用食物（點擊 ⚡ 直接存入今日，免等 AI）：
                 </span>
                 <button
                   type="button"
@@ -635,11 +635,15 @@ export default function FoodCapture({
                             ({item.estimatedWeightG}g)
                           </span>
                         )}
-                        {item.count > 1 && (
+                        {item.count > 1 ? (
                           <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-100 px-1 py-0.2 rounded shrink-0">
                             吃過 {item.count} 次
                           </span>
-                        )}
+                        ) : item.isCommonDb ? (
+                          <span className="text-[9px] text-teal-700 bg-teal-50 border border-teal-200 px-1 py-0.2 rounded shrink-0">
+                            標準資料庫
+                          </span>
+                        ) : null}
                       </div>
                       <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-2">
                         <span className="font-semibold text-amber-600">{item.calories} kcal</span>

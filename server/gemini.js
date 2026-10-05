@@ -194,8 +194,11 @@ export async function analyzeFoodWithGemini({ imageBuffer, mimeType, textInput, 
       }
     }
 
-    const isZeroCalorie = /無糖|0卡|零卡|水|烏龍茶|綠茶|紅茶|青茶|黑咖啡|茶/i.test(parsed.food_name || textInput || '') &&
-      /無糖|0卡|零卡|水|黑咖啡|美式/i.test(parsed.food_name || textInput || '');
+    const targetFoodName = (parsed.food_name || textInput || '').trim();
+    // 嚴格零卡飲品檢查：純開水/礦泉水，或明確標示無糖的茶/黑咖啡，絕對排除「水餃、水果、水煮蛋、水煎包」等含「水」字食物
+    const isZeroCalorie = /^(?:水|白開水|礦泉水|純水|開水|飲用水|氣泡水)$/i.test(targetFoodName) ||
+      (/(?:無糖|0卡|零卡)/i.test(targetFoodName) && /(?:茶|咖啡|水|可樂|汽水|四季春|烏龍|紅茶|綠茶|麥茶|青茶)/i.test(targetFoodName)) ||
+      /^(?:黑咖啡|美式咖啡|美式黑咖啡)$/i.test(targetFoodName);
 
     const parsedCal = Number(parsed.calories);
     const finalCal = !isNaN(parsedCal) ? Math.round(parsedCal) : (isZeroCalorie ? 0 : 450);
@@ -233,10 +236,10 @@ function generateSimulatedNutrition(foodInput) {
   const weightMatch = cleanInput.match(/(\d+(?:\.\d+)?)\s*(?:g|克|ml|毫升|公克)/i);
   const userWeight = weightMatch ? parseFloat(weightMatch[1]) : null;
 
-  // 1. 檢查是否為無糖/零卡飲品（無糖茶、黑咖啡、美式、水等）
-  const isZeroCalBeverage = /(?:無糖|零卡|0卡)/i.test(cleanInput) ||
-    /黑咖啡|美式咖啡|美式/i.test(cleanInput) ||
-    /^(?:水|白開水|礦泉水|純水|氣泡水)$/i.test(cleanInput);
+  // 1. 嚴格檢查是否為無糖/零卡飲品（絕不誤判水餃、水果、水煎包等非水飲品）
+  const isZeroCalBeverage = /^(?:水|白開水|礦泉水|純水|開水|飲用水|氣泡水)$/i.test(cleanInput) ||
+    (/(?:無糖|0卡|零卡)/i.test(cleanInput) && /(?:茶|咖啡|水|可樂|汽水|四季春|烏龍|紅茶|綠茶|麥茶|青茶)/i.test(cleanInput)) ||
+    /^(?:黑咖啡|美式咖啡|美式黑咖啡|美式)$/i.test(cleanInput);
 
   if (isZeroCalBeverage) {
     const weight = userWeight || 600;
@@ -253,6 +256,29 @@ function generateSimulatedNutrition(foodInput) {
       },
       ingredients: [{ name: cleanInput, weight_g: weight, calories: 0 }],
       confidence_note: '【示範模式】無糖茶飲/黑咖啡/水不含熱量與三大營養素 (0 kcal)。'
+    };
+  }
+
+  // 2. 水餃 / 麵點點心類
+  const isDumpling = /水餃|蒸餃|煎餃|鍋貼|水煎包|小籠包/i.test(cleanInput);
+  if (isDumpling) {
+    const countMatch = cleanInput.match(/(\d+)\s*(?:顆|個|隻)/);
+    const count = countMatch ? parseInt(countMatch[1], 10) : 10;
+    const weight = userWeight || (count * 25);
+    const cals = Math.round(weight * 2.2);
+    return {
+      isMock: true,
+      food_name: cleanInput || `水餃 (${count}顆)`,
+      estimated_weight_g: weight,
+      calories: cals,
+      macros: {
+        protein_g: Math.round(weight * 0.092 * 10) / 10,
+        carbs_g: Math.round(weight * 0.22 * 10) / 10,
+        fat_g: Math.round(weight * 0.108 * 10) / 10,
+        fiber_g: Math.round(weight * 0.012 * 10) / 10
+      },
+      ingredients: [{ name: cleanInput, weight_g: weight, calories: cals }],
+      confidence_note: `【示範估算】水餃約 ${count} 顆 (${weight}g) 營養估算`
     };
   }
 
