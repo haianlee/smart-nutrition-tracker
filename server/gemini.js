@@ -1,8 +1,8 @@
 // Using global fetch built into Node.js
 
 const SYSTEM_PROMPT = `
-你是一位專業的註冊營養師與食物影像辨識專家。
-請仔細辨識照片中的所有食物、菜色或文字描述的餐點，並嚴格推估以下資訊：
+你是一位具備世界級視覺感知與資料庫知識的頂級註冊營養師與食物影像辨識專家。
+請仔細辨識照片中的食物、商品包裝或文字描述，嚴格推估並輸出以下資訊：
 1. 菜名 / 食物名稱 (food_name)
 2. 推估總克數/重量 (estimated_weight_g)
 3. 總熱量大卡 (calories)
@@ -11,30 +11,43 @@ const SYSTEM_PROMPT = `
    - 碳水化合物 (carbs_g)
    - 脂肪 (fat_g)
    - 膳食纖維 (fiber_g)
-5. 細項食材拆解與個別推估 (ingredients): 陣列，每個元素包含 {name, weight_g, calories}
-6. 推估依據與信心備註 (confidence_note): 簡要說明主食、主菜份量與烹調方式（如炸、煎、清蒸、醬汁多寡等）
+5. 細項食材/單項菜色拆解 (ingredients): 陣列，每個元素包含 {name, weight_g, calories}
+6. 推估依據與信心備註 (confidence_note): 簡要說明辨識到的品牌、份量依據或烹調方式
 
-【重要輸出規則】
-- 必須「只輸出標準 JSON」，不要包含任何額外的 Markdown 標記（例如不要包裹 \`\`\`json ），確保可被直接 JSON.parse()。
-- 【營養標示表格辨識重要規範】：若照片拍攝的是食品/包裝背面的「營養標示 (Nutrition Facts)」表格，請優先精準辨識表格內印製的數值！辨識「每份」或「整包/整瓶」的總熱量(大卡)、蛋白質(g)、碳水化合物(g)、脂肪(g)、糖(g)與公克數(g)，切勿隨意概算！
-- 【零熱量/低熱量特別規則】：水、無糖茶（無糖綠茶、無糖烏龍茶、無糖紅茶、無糖青茶、麥茶、普洱茶等）、黑咖啡、零卡可樂/氣泡水、代糖飲品等，其總熱量 (calories)、蛋白質 (protein_g)、碳水化合物 (carbs_g)、脂肪 (fat_g) 必須嚴格標示為 0（或接近0的真實數值），絕對不可誤估為有糖飲料或高熱量食物！
-- 請嚴格遵循此格式：
+【核心視覺辨識三大情境規範】
+情境一：【市售包裝零食 / 食品包裝正面】（例如餅乾袋、洋芋片、泡麵、飲料、甜點包裝）
+- 即使只拍到包裝正面（沒有背面營養表），請運用強大的市售商品知識庫，精準辨識出其「品牌」（如：農心 Nongshim、樂事 Lay's、義美、卡迪那、盛香珍等）與「完整商品名稱」（包含外語如韓文、日文、英文品名）。
+- 自動匹配該市售規格之標準包裝容量/淨重（如標準單包 55g、63g、110g 等）。
+- 檢索並填入該市售商品整份/整包之官方標準熱量、碳水化合物、蛋白質、脂肪數值，切勿憑空亂猜！
+
+情境二：【多樣食物 / 一餐多道菜色 / 拼盤外食】（例如：便當多格菜色、主食+湯品+小菜、超商多樣組合、早午餐拼盤）
+- food_name 請以清楚的複合名稱呈現，例如「超商午餐（鮪魚飯糰 + 茶葉蛋 + 無糖綠茶）」或「牛肉麵 + 燙青菜 + 豆干」。
+- estimated_weight_g 為整餐所有食物推估總重。
+- calories 與 macros (蛋白質/碳水/脂肪/纖維) 為所有餐點之加總總和。
+- 最重要：ingredients 陣列中「必須詳細拆解每一道獨立菜色」，個別標示每一項的 name、weight_g 與單項 calories！
+
+情境三：【包裝背面營養標示表格 (Nutrition Facts)】
+- 若拍到背面營養標示表，優先 100% 精確讀取表上印製之「每份」或「每包」總熱量(大卡)、蛋白質(g)、碳水化合物(g)、脂肪(g)等真實數值。
+
+【零熱量/低熱量特別規則】：純水、白開水、礦泉水、氣泡水、無糖茶飲（無糖綠茶、無糖烏龍、無糖紅茶、麥茶、四季春等）、美式黑咖啡，其熱量與三大營養素嚴格標記為 0（黑咖啡約5kcal）。但切勿將含「水」字的固體食物（如水餃、水果、水煎包、水煮蛋）誤判為零卡！
+
+【輸出規則】
+必須「只輸出標準 JSON」，不要包含任何額外的 Markdown 標記（不要包裹 \`\`\`json ），確保可直接 JSON.parse()。
+格式範例：
 {
-  "food_name": "照燒雞腿便當",
-  "estimated_weight_g": 450,
-  "calories": 680,
+  "food_name": "農心 奶油可頌麵包餅乾",
+  "estimated_weight_g": 55,
+  "calories": 285,
   "macros": {
-    "protein_g": 35,
-    "carbs_g": 75,
-    "fat_g": 22,
-    "fiber_g": 4
+    "protein_g": 3,
+    "carbs_g": 34,
+    "fat_g": 15,
+    "fiber_g": 1
   },
   "ingredients": [
-    {"name": "白飯", "weight_g": 200, "calories": 260},
-    {"name": "烤去骨雞腿", "weight_g": 150, "calories": 280},
-    {"name": "炒青菜與滷蛋", "weight_g": 100, "calories": 140}
+    {"name": "農心 奶油可頌麵包餅乾", "weight_g": 55, "calories": 285}
   ],
-  "confidence_note": "主食為白飯約200g，主菜烤雞腿去骨約150g，配菜包含炒青菜與滷蛋"
+  "confidence_note": "精準辨識為農心 (Nongshim) 麵包部長 (빵부장) 鹽味奶油可頌麵包餅乾，以單包標準淨重55克進行熱量與三大營養素推估。"
 }
 `;
 
@@ -68,11 +81,14 @@ export async function analyzeFoodWithGemini({ imageBuffer, mimeType, textInput, 
 
   const promptText = textInput 
     ? `使用者輸入食物品名或份量說明：「${textInput}」。
-【特別規範】
-1. 若照片是食品包裝或「營養標示表」，請直接精準辨識讀取照片中的熱量 (大卡)、蛋白質、脂肪、碳水化合物數值！
-2. 若使用者輸入包含具體商品名稱（例如特定品牌包裝食品）或明確重量（例如「孔雀捲心餅 63g」），請嚴格鎖定該指定品項與明確克數，推估或檢索其真實包裝營養標示，切勿覆寫或忽視使用者的克數！
-3. 若為「無糖茶」（如無糖烏龍茶、無糖綠茶、無糖紅茶、麥茶、四季春等）、「水」、「黑咖啡」或標明「無糖/零卡/0卡」之飲品，總熱量 calories 必須為 0 kcal，蛋白質、碳水化合物、脂肪皆為 0g！`
-    : `請仔細分析照片中的食物或食品包裝。若照片中包含「營養標示」表格（包含熱量、蛋白質、脂肪、碳水化合物），請務必優先精確讀取表格中的數值填入！若為無糖茶水或黑咖啡等無熱量飲品，請準確評估熱量為 0 kcal。`;
+請仔細辨識照片中的食物或食品包裝：
+1. 若照片是市售包裝零食/食品（如餅乾、洋芋片、泡麵、飲料），無論拍到的是「包裝正面」或「背面營養標示」，請精準辨識品牌、品名與標準單包規格容量，檢索該商品真實熱量與三大營養素！
+2. 若照片包含多樣食物/多道菜色，請於 ingredients 陣列中詳細拆解每一道食物個別的重量與熱量！
+3. 若使用者指定了特定克數或品名，請優先遵從使用者指定的份量。`
+    : `請仔細分析照片中的食物或食品包裝：
+1. 【市售商品包裝】：若為餅乾、零食、飲料、泡麵等包裝正面，請辨識其品牌、商品品名、標準包裝克數（如整包55g），並給出該商品標準官方熱量與三大營養素！若為背面營養標示表格，請優先精準讀取表上數值！
+2. 【多樣食物/多道菜色】：若照片包含多樣食物（如主餐+小菜+湯品），請計算全餐總和，並於 ingredients 陣列中逐一列出每一道食物的品名、推估重量與單項熱量！
+3. 【零熱量防呆】：純水、無糖茶水、黑咖啡熱量標記為 0 kcal，切勿將水餃、水果等誤算為 0 卡。`;
 
   parts.push({ text: promptText });
   contents.push({ parts });
@@ -84,7 +100,7 @@ export async function analyzeFoodWithGemini({ imageBuffer, mimeType, textInput, 
     },
     generationConfig: {
       temperature: 0.1,
-      maxOutputTokens: 600,
+      maxOutputTokens: imageBuffer ? 1200 : 600, // 1200 tokens for images to prevent JSON truncation
       responseMimeType: "application/json",
       thinkingConfig: { thinkingBudget: 0 } // Disable thinking to achieve sub-second response times
     }
@@ -100,12 +116,15 @@ export async function analyzeFoodWithGemini({ imageBuffer, mimeType, textInput, 
     'gemini-3.5-flash',
     'gemini-3.5-flash-lite'
   ];
-  // For text-only lookup, try at most 2 models with fast timeout to prevent waiting 30 seconds
+  // For text-only lookup, try at most 2 models; for image analysis try at most 3
   const maxModels = imageBuffer ? 3 : 2;
   const modelsToTry = [...new Set(candidateModels.filter(m => m !== 'gemini-3.8-flash'))].slice(0, maxModels);
 
   let candidateText = null;
   let lastError = null;
+
+  // Crucial: Image analysis requires sufficient network & multimodal inference time (18s vs 4s)
+  const timeoutMs = imageBuffer ? 18000 : 4000;
 
   for (const mdl of modelsToTry) {
     const currentEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${mdl}:generateContent?key=${effectiveKey}`;
@@ -114,7 +133,7 @@ export async function analyzeFoodWithGemini({ imageBuffer, mimeType, textInput, 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(3500) // Fast 3.5s timeout per model to prevent hanging
+        signal: AbortSignal.timeout(timeoutMs)
       });
 
       if (!res.ok) {
